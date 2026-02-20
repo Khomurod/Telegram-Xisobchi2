@@ -1,0 +1,40 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+class Settings:
+    """Application settings loaded from environment variables."""
+
+    # Telegram
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")
+    WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook")
+    MODE: str = os.getenv("MODE", "polling")  # "polling" or "webhook"
+
+    # Database
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/xisobchi.db")
+
+    # Google Cloud Speech-to-Text
+    GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+    SPEECH_LANGUAGE: str = os.getenv("SPEECH_LANGUAGE", "uz-UZ")
+    SPEECH_ALT_LANGUAGES: list = os.getenv("SPEECH_ALT_LANGUAGES", "ru-RU").split(",")
+
+    # Voice limits
+    MAX_VOICE_DURATION: int = int(os.getenv("MAX_VOICE_DURATION", "60"))
+    VOICE_RATE_LIMIT: int = int(os.getenv("VOICE_RATE_LIMIT", "10"))  # per minute per user
+
+    # Logging
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+    @property
+    def webhook_full_url(self) -> str:
+        return f"{self.WEBHOOK_URL}{self.WEBHOOK_PATH}"
+
+    @property
+    def is_webhook(self) -> bool:
+        return self.MODE == "webhook"
+
+
+settings = Settings()

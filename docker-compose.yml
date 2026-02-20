@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    container_name: xisobchi-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MODE=webhook
+      - DATABASE_URL=sqlite+aiosqlite:///./data/xisobchi.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data                    # Persist database
+      - ./credentials.json:/app/credentials.json:ro  # Google Cloud credentials
