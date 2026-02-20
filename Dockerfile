@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# System deps for audio processing (pydub requires ffmpeg)
+# System deps for audio conversion (OGG → WAV via ffmpeg)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*

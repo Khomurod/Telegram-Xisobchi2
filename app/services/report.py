@@ -1,33 +1,10 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from app.database.repositories.transaction import TransactionRepository
+from app.constants import UZT, CATEGORY_DISPLAY
+from app.utils.formatting import format_amount
 from app.utils.logger import setup_logger
 
 logger = setup_logger("report")
-
-# Uzbekistan timezone (UTC+5)
-UZT = timezone(timedelta(hours=5))
-
-# Category display names in Uzbek
-CATEGORY_NAMES = {
-    "oziq-ovqat": "🍽 Oziq-ovqat",
-    "transport": "🚕 Transport",
-    "uy-joy": "🏠 Uy-joy",
-    "sog'liq": "💊 Sog'liq",
-    "kiyim": "👔 Kiyim",
-    "aloqa": "📱 Aloqa",
-    "ta'lim": "📚 Ta'lim",
-    "ko'ngil ochar": "🎬 Ko'ngil ochar",
-    "o'tkazma": "💸 O'tkazma",
-    "maosh": "💰 Maosh",
-    "boshqa": "📦 Boshqa",
-}
-
-
-def _fmt(amount: float, currency: str) -> str:
-    """Format amount with currency."""
-    if currency == "USD":
-        return f"${amount:,.2f}"
-    return f"{amount:,.0f} so'm"
 
 
 class ReportService:
@@ -51,19 +28,19 @@ class ReportService:
 
         if has_uzs:
             lines.append("🇺🇿 *So'm:*")
-            lines.append(f"  📈 Kirim: {_fmt(uzs['income'], 'UZS')}")
-            lines.append(f"  📉 Chiqim: {_fmt(uzs['expense'], 'UZS')}")
+            lines.append(f"  📈 Kirim: {format_amount(uzs['income'], 'UZS')}")
+            lines.append(f"  📉 Chiqim: {format_amount(uzs['expense'], 'UZS')}")
             balance_emoji = "✅" if uzs["balance"] >= 0 else "🔴"
-            lines.append(f"  {balance_emoji} Balans: {_fmt(uzs['balance'], 'UZS')}")
+            lines.append(f"  {balance_emoji} Balans: {format_amount(uzs['balance'], 'UZS')}")
 
         if has_usd:
             if has_uzs:
                 lines.append("")
             lines.append("🇺🇸 *Dollar:*")
-            lines.append(f"  📈 Kirim: {_fmt(usd['income'], 'USD')}")
-            lines.append(f"  📉 Chiqim: {_fmt(usd['expense'], 'USD')}")
+            lines.append(f"  📈 Kirim: {format_amount(usd['income'], 'USD')}")
+            lines.append(f"  📉 Chiqim: {format_amount(usd['expense'], 'USD')}")
             balance_emoji = "✅" if usd["balance"] >= 0 else "🔴"
-            lines.append(f"  {balance_emoji} Balans: {_fmt(usd['balance'], 'USD')}")
+            lines.append(f"  {balance_emoji} Balans: {format_amount(usd['balance'], 'USD')}")
 
         return "\n".join(lines)
 
@@ -80,9 +57,9 @@ class ReportService:
 
         for txn in transactions:
             emoji = "📈" if txn.type == "income" else "📉"
-            cat = CATEGORY_NAMES.get(txn.category, txn.category)
+            cat = CATEGORY_DISPLAY.get(txn.category, txn.category)
             time_str = txn.created_at.strftime("%H:%M") if txn.created_at else ""
-            lines.append(f"{emoji} {_fmt(txn.amount, txn.currency)} | {cat} | {time_str}")
+            lines.append(f"{emoji} {format_amount(txn.amount, txn.currency)} | {cat} | {time_str}")
 
             key = f"{txn.type}_{txn.currency.lower()}"
             if key in totals:
@@ -90,13 +67,13 @@ class ReportService:
 
         lines.append("\n─────────────────")
         if totals["income_uzs"] > 0 or totals["expense_uzs"] > 0:
-            lines.append(f"📈 Kirim: {_fmt(totals['income_uzs'], 'UZS')}")
-            lines.append(f"📉 Chiqim: {_fmt(totals['expense_uzs'], 'UZS')}")
+            lines.append(f"📈 Kirim: {format_amount(totals['income_uzs'], 'UZS')}")
+            lines.append(f"📉 Chiqim: {format_amount(totals['expense_uzs'], 'UZS')}")
             net = totals["income_uzs"] - totals["expense_uzs"]
-            lines.append(f"{'✅' if net >= 0 else '🔴'} Farq: {_fmt(net, 'UZS')}")
+            lines.append(f"{'✅' if net >= 0 else '🔴'} Farq: {format_amount(net, 'UZS')}")
         if totals["income_usd"] > 0 or totals["expense_usd"] > 0:
-            lines.append(f"📈 Kirim: {_fmt(totals['income_usd'], 'USD')}")
-            lines.append(f"📉 Chiqim: {_fmt(totals['expense_usd'], 'USD')}")
+            lines.append(f"📈 Kirim: {format_amount(totals['income_usd'], 'USD')}")
+            lines.append(f"📉 Chiqim: {format_amount(totals['expense_usd'], 'USD')}")
 
         return "\n".join(lines)
 
@@ -115,8 +92,8 @@ class ReportService:
         income_cats = {}
         expense_cats = {}
         for cat, txn_type, currency, total in rows:
-            cat_name = CATEGORY_NAMES.get(cat, cat)
-            entry = f"{cat_name}: {_fmt(total, currency)}"
+            cat_name = CATEGORY_DISPLAY.get(cat, cat)
+            entry = f"{cat_name}: {format_amount(total, currency)}"
             if txn_type == "income":
                 income_cats[cat] = entry
             else:
@@ -133,6 +110,39 @@ class ReportService:
             lines.append("📉 *Chiqimlar:*")
             for entry in expense_cats.values():
                 lines.append(f"  {entry}")
+
+        return "\n".join(lines)
+
+    async def get_week_report(self, user_id: int) -> str:
+        """Last 7 days transactions summary."""
+        transactions = await self.txn_repo.get_this_week(user_id)
+
+        if not transactions:
+            return "📅 *Haftalik hisobot*\n\nOxirgi 7 kunda hech qanday operatsiya yo'q."
+
+        lines = ["📅 *Haftalik hisobot* (oxirgi 7 kun)\n"]
+        totals = {"income_uzs": 0, "expense_uzs": 0, "income_usd": 0, "expense_usd": 0}
+
+        for txn in transactions:
+            emoji = "📈" if txn.type == "income" else "📉"
+            cat = CATEGORY_DISPLAY.get(txn.category, txn.category)
+            date_str = txn.created_at.strftime("%d.%m %H:%M") if txn.created_at else ""
+            lines.append(f"{emoji} {format_amount(float(txn.amount), txn.currency)} | {cat} | {date_str}")
+
+            key = f"{txn.type}_{txn.currency.lower()}"
+            if key in totals:
+                totals[key] += float(txn.amount)
+
+        lines.append("\n─────────────────")
+        lines.append(f"📊 Jami operatsiyalar: *{len(transactions)}*")
+        if totals["income_uzs"] > 0 or totals["expense_uzs"] > 0:
+            lines.append(f"📈 Kirim: {format_amount(totals['income_uzs'], 'UZS')}")
+            lines.append(f"📉 Chiqim: {format_amount(totals['expense_uzs'], 'UZS')}")
+            net = totals["income_uzs"] - totals["expense_uzs"]
+            lines.append(f"{'✅' if net >= 0 else '🔴'} Farq: {format_amount(net, 'UZS')}")
+        if totals["income_usd"] > 0 or totals["expense_usd"] > 0:
+            lines.append(f"📈 Kirim: {format_amount(totals['income_usd'], 'USD')}")
+            lines.append(f"📉 Chiqim: {format_amount(totals['expense_usd'], 'USD')}")
 
         return "\n".join(lines)
 

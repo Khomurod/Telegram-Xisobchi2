@@ -1,15 +1,15 @@
 # 🎙 Xisobchi Bot — Uzbek Voice Expense Tracker
 
-Telegram bot that converts Uzbek voice messages into financial transactions using local AI speech recognition.
+Telegram bot that converts Uzbek voice messages into financial transactions using Google Cloud Speech-to-Text.
 
 ## Features
 
 - 🎤 **Voice Input** — Send voice messages in Uzbek to record transactions
-- 🧠 **AI Speech-to-Text** — Local Whisper model (free, no API costs)
+- 🧠 **AI Speech-to-Text** — Google Cloud Speech-to-Text with Uzbek language support
 - 📊 **Smart Parsing** — Understands Uzbek + Russian financial phrases
 - 💰 **Balance Tracking** — Income/expense tracking with UZS and USD
 - 📈 **Reports** — Daily, monthly, and full financial reports
-- 🔒 **Privacy** — All data isolated per user, processed locally
+- 🔒 **Privacy** — All data isolated per user
 
 ## Commands
 
@@ -51,7 +51,7 @@ cp .env.example .env
 python run.py
 ```
 
-The Whisper model downloads automatically on the first voice message (~500MB for `small` model).
+You need a Google Cloud project with Speech-to-Text API enabled and a service account key (`credentials.json`).
 
 ## Docker Deployment
 
@@ -81,7 +81,7 @@ WEBHOOK_URL=https://your-domain.com
 │   │   ├── models.py          # User, Transaction models
 │   │   └── repositories/      # Repository pattern (User, Transaction)
 │   ├── services/
-│   │   ├── speech.py          # Whisper transcription
+│   │   ├── speech_service.py   # Google Cloud STT
 │   │   ├── parser.py          # Uzbek NLP parser
 │   │   ├── transaction.py     # Business logic
 │   │   └── report.py          # Report generation
@@ -122,7 +122,7 @@ aiogram Handlers
 |-------|-----------|
 | Bot Framework | aiogram 3 |
 | Web Framework | FastAPI + uvicorn |
-| Speech-to-Text | faster-whisper (local) |
+| Speech-to-Text | Google Cloud Speech-to-Text |
 | Database | SQLite (async via SQLAlchemy) |
 | NLP | Rule-based Uzbek parser |
 

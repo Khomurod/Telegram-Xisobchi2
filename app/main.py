@@ -1,4 +1,6 @@
 import asyncio
+import os
+import glob
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from aiogram.types import Update
@@ -9,12 +11,32 @@ from app.utils.logger import setup_logger
 
 logger = setup_logger("main")
 
+# Temp directory for voice file processing
+TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp")
+
+
+def _cleanup_temp():
+    """Remove orphaned audio files from temp directory on startup."""
+    if not os.path.exists(TEMP_DIR):
+        return
+    removed = 0
+    for pattern in ("*.ogg", "*.wav"):
+        for f in glob.glob(os.path.join(TEMP_DIR, pattern)):
+            try:
+                os.remove(f)
+                removed += 1
+            except OSError:
+                pass
+    if removed:
+        logger.info(f"Cleaned up {removed} orphaned temp files")
+
 
 # ── FastAPI app (webhook mode) ────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle for webhook mode."""
     logger.info("Starting application in webhook mode...")
+    _cleanup_temp()
     await init_db()
     await bot.set_webhook(settings.webhook_full_url)
     logger.info(f"Webhook set: {settings.webhook_full_url}")
@@ -40,7 +62,13 @@ async def webhook(request: Request):
 async def start_polling():
     """Start bot in polling mode for local development."""
     logger.info("Starting bot in polling mode...")
+    _cleanup_temp()
     await init_db()
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Bot is running! Press Ctrl+C to stop.")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
+        logger.info("Bot session closed")
+

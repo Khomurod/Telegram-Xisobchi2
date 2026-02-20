@@ -7,3 +7,4 @@ data/
 temp/
 .vscode/
 .idea/
+credentials.json

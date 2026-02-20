@@ -1,10 +1,8 @@
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, func
+from datetime import datetime, timedelta
+from sqlalchemy import select, func, delete as sa_delete
 from app.database.models import Transaction
 from app.database.repositories.base import BaseRepository
-
-# Uzbekistan timezone
-UZT = timezone(timedelta(hours=5))
+from app.constants import UZT
 
 
 class TransactionRepository(BaseRepository):
@@ -44,6 +42,24 @@ class TransactionRepository(BaseRepository):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def get_last(self, user_id: int) -> Transaction | None:
+        """Get the most recent transaction for a user."""
+        query = (
+            select(Transaction)
+            .where(Transaction.user_id == user_id)
+            .order_by(Transaction.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def delete(self, txn_id: int) -> bool:
+        """Delete a transaction by ID. Returns True if deleted."""
+        stmt = sa_delete(Transaction).where(Transaction.id == txn_id)
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount > 0
+
     async def get_balance(self, user_id: int, currency: str = None) -> dict:
         """Get total income, expense, and net balance."""
         income_q = select(func.coalesce(func.sum(Transaction.amount), 0)).where(
@@ -64,6 +80,12 @@ class TransactionRepository(BaseRepository):
         today_start = datetime.now(UZT).replace(hour=0, minute=0, second=0, microsecond=0)
         return await self.get_by_user(user_id, start_date=today_start)
 
+    async def get_this_week(self, user_id: int) -> list[Transaction]:
+        """Get transactions from the last 7 days."""
+        week_start = datetime.now(UZT) - timedelta(days=7)
+        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        return await self.get_by_user(user_id, start_date=week_start)
+
     async def get_this_month(self, user_id: int) -> list[Transaction]:
         month_start = datetime.now(UZT).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         return await self.get_by_user(user_id, start_date=month_start)
@@ -83,3 +105,4 @@ class TransactionRepository(BaseRepository):
         )
         result = await self.session.execute(query)
         return result.all()
+

@@ -10,6 +10,8 @@ from app.services.speech_service import transcribe_audio
 from app.services.parser import parse_transaction
 from app.services.transaction import TransactionService
 from app.config import settings
+from app.constants import CATEGORY_EMOJI, CATEGORY_NAMES
+from app.utils.formatting import format_amount
 from app.utils.logger import setup_logger
 
 logger = setup_logger("voice_handler")
@@ -47,27 +49,7 @@ def _check_rate_limit(user_id: int) -> bool:
 _pending_confirmations: dict[str, dict] = {}
 
 
-# ── Formatting helpers ───────────────────────────────────────
 
-def _format_amount(amount: float, currency: str) -> str:
-    if currency == "USD":
-        return f"${amount:,.2f}"
-    return f"{amount:,.0f} so'm"
-
-
-CATEGORY_EMOJI = {
-    "oziq-ovqat": "🍽", "transport": "🚕", "uy-joy": "🏠",
-    "sog'liq": "💊", "kiyim": "👔", "aloqa": "📱",
-    "ta'lim": "📚", "ko'ngil ochar": "🎬", "o'tkazma": "💸",
-    "maosh": "💰", "boshqa": "📦",
-}
-
-CATEGORY_NAMES = {
-    "oziq-ovqat": "Oziq-ovqat", "transport": "Transport", "uy-joy": "Uy-joy",
-    "sog'liq": "Sog'liq", "kiyim": "Kiyim", "aloqa": "Aloqa",
-    "ta'lim": "Ta'lim", "ko'ngil ochar": "Ko'ngil ochar",
-    "o'tkazma": "O'tkazma", "maosh": "Maosh", "boshqa": "Boshqa",
-}
 
 
 # ── Voice message handler ────────────────────────────────────
@@ -132,7 +114,7 @@ async def handle_voice(message: types.Message, bot: Bot):
         emoji = "📈" if parsed.type == "income" else "📉"
         cat_emoji = CATEGORY_EMOJI.get(parsed.category, "📦")
         cat_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
-        amount_str = _format_amount(parsed.amount, parsed.currency)
+        amount_str = format_amount(parsed.amount, parsed.currency)
 
         # Store pending confirmation
         confirm_key = f"{user_id}_{message.message_id}"
@@ -145,11 +127,17 @@ async def handle_voice(message: types.Message, bot: Bot):
             "confidence": result.confidence,
         }
 
+        # Add confidence warning if transcription quality is low
+        conf_warning = ""
+        if result.confidence < 0.6:
+            conf_warning = "\n⚠️ _Ovoz sifati past. Iltimos, tekshiring._\n"
+
         confirm_text = (
             f"{emoji} *{type_uz}*\n"
             f"💵 {amount_str}\n"
             f"{cat_emoji} {cat_name}\n\n"
-            f"📝 _{result.text}_\n\n"
+            f"📝 _{result.text}_\n"
+            f"{conf_warning}\n"
             f"Shu ma'lumot to'g'rimi?"
         )
 
@@ -210,7 +198,7 @@ async def handle_confirm(callback: CallbackQuery):
             emoji = "📈" if txn["type"] == "income" else "📉"
             type_uz = "Kirim" if txn["type"] == "income" else "Chiqim"
             cat_emoji = CATEGORY_EMOJI.get(txn["category"], "📦")
-            amount_str = _format_amount(txn["amount"], txn["currency"])
+            amount_str = format_amount(txn["amount"], txn["currency"])
 
             response = (
                 f"✅ Operatsiya saqlandi!\n\n"

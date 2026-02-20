@@ -1,11 +1,11 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, BigInteger
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, BigInteger
 from sqlalchemy.orm import declarative_base, relationship
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from app.constants import UZT
 
 Base = declarative_base()
 
-# Uzbekistan timezone (UTC+5)
-UZT = timezone(timedelta(hours=5))
+
 
 
 def now_uzt():
@@ -38,7 +38,7 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     type = Column(String(10), nullable=False)  # "income" or "expense"
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(18, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="UZS")
     category = Column(String(100), nullable=False, default="boshqa")
     description = Column(String(500), nullable=True)
