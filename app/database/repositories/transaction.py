@@ -60,6 +60,27 @@ class TransactionRepository(BaseRepository):
         await self.session.commit()
         return result.rowcount > 0
 
+    async def update(self, txn_id: int, **kwargs) -> Transaction | None:
+        """Update fields on a transaction. Returns updated object or None."""
+        query = select(Transaction).where(Transaction.id == txn_id)
+        result = await self.session.execute(query)
+        txn = result.scalar_one_or_none()
+        if not txn:
+            return None
+        for key, value in kwargs.items():
+            if hasattr(txn, key):
+                setattr(txn, key, value)
+        await self.session.commit()
+        await self.session.refresh(txn)
+        return txn
+
+    async def get_by_id(self, txn_id: int) -> Transaction | None:
+        """Get a single transaction by its ID."""
+        result = await self.session.execute(
+            select(Transaction).where(Transaction.id == txn_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_balance(self, user_id: int, currency: str = None) -> dict:
         """Get total income, expense, and net balance."""
         income_q = select(func.coalesce(func.sum(Transaction.amount), 0)).where(

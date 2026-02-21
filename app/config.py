@@ -40,6 +40,9 @@ class Settings:
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # Admin panel — set ADMIN_SECRET in Render env vars
+    ADMIN_SECRET: str = os.getenv("ADMIN_SECRET", "")
+
     @property
     def webhook_full_url(self) -> str:
         return f"{self.WEBHOOK_URL}{self.WEBHOOK_PATH}"

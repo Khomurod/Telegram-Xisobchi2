@@ -61,11 +61,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Xisobchi Bot", lifespan=lifespan)
 
-# Allow GitHub Pages (and any origin) to call /stats
+# Allow dashboard (any origin) to call /stats and /admin/*
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -119,6 +119,106 @@ async def stats():
     except Exception as e:
         logger.error(f"Stats error: {e}", exc_info=True)
         return JSONResponse({"error": "stats unavailable"}, status_code=500)
+
+
+# ── Admin helpers ─────────────────────────────────────────────
+def _check_admin(request: Request) -> bool:
+    """Validate X-Admin-Token header."""
+    secret = settings.ADMIN_SECRET
+    if not secret:
+        return False  # No secret configured = admin disabled
+    return request.headers.get("X-Admin-Token") == secret
+
+
+@app.get("/admin/users")
+async def admin_users(request: Request, page: int = 1, limit: int = 20):
+    """Paginated list of registered users. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        offset = (page - 1) * limit
+        async with async_session() as session:
+            total = (await session.execute(
+                select(func.count()).select_from(User)
+            )).scalar() or 0
+
+            rows = (await session.execute(
+                select(User)
+                .order_by(User.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )).scalars().all()
+
+        users = [
+            {
+                "id": u.id,
+                "telegram_id": u.telegram_id,
+                "first_name": u.first_name or "",
+                "username": u.username or "",
+                "created_at": u.created_at.isoformat() if u.created_at else "",
+            }
+            for u in rows
+        ]
+        return JSONResponse({"total": total, "page": page, "limit": limit, "users": users})
+    except Exception as e:
+        logger.error(f"Admin users error: {e}", exc_info=True)
+        return JSONResponse({"error": "unavailable"}, status_code=500)
+
+
+@app.post("/admin/broadcast")
+async def admin_broadcast(request: Request):
+    """Send a message to all registered users. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return JSONResponse({"error": "text required"}, status_code=400)
+    if len(text) > 4096:
+        return JSONResponse({"error": "message too long (max 4096 chars)"}, status_code=400)
+
+    try:
+        async with async_session() as session:
+            rows = (await session.execute(select(User.telegram_id))).scalars().all()
+
+        sent = failed = 0
+        for tg_id in rows:
+            try:
+                await bot.send_message(chat_id=tg_id, text=text, parse_mode="HTML")
+                sent += 1
+            except Exception:
+                failed += 1
+
+        logger.info(f"Broadcast: sent={sent} failed={failed}")
+        return JSONResponse({"sent": sent, "failed": failed})
+    except Exception as e:
+        logger.error(f"Broadcast error: {e}", exc_info=True)
+        return JSONResponse({"error": "broadcast failed"}, status_code=500)
+
+
+@app.get("/admin/stats/daily")
+async def admin_daily_stats(request: Request):
+    """Daily signups for the last 30 days. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        from sqlalchemy import cast, Date as SADate
+        async with async_session() as session:
+            rows = (await session.execute(
+                select(
+                    cast(User.created_at, SADate).label("day"),
+                    func.count().label("cnt"),
+                )
+                .group_by(cast(User.created_at, SADate))
+                .order_by(cast(User.created_at, SADate))
+            )).all()
+
+        return JSONResponse([
+            {"day": str(r.day), "count": r.cnt} for r in rows
+        ])
+    except Exception as e:
+        logger.error(f"Daily stats error: {e}", exc_info=True)
+        return JSONResponse({"error": "unavailable"}, status_code=500)
 
 @app.post(settings.WEBHOOK_PATH)
 async def webhook(request: Request):
