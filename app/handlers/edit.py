@@ -2,7 +2,6 @@
 Transaction history viewer with inline edit / delete buttons.
 
 /tarix — shows the last 10 transactions with ✏️ Edit and 🗑 Delete buttons.
-Uses Telegram Bot API 9.4 colored buttons (style parameter).
 """
 from aiogram import Router, F
 from aiogram.types import (
@@ -67,17 +66,14 @@ async def cmd_history(message: Message):
                 f"     {cat_emoji} {txn.category}  |  📅 {date_str}"
             )
 
-            # Colored buttons: Edit=Primary (blue), Delete=Danger (red)
             buttons_rows.append([
                 InlineKeyboardButton(
                     text=f"✏️ {i}. Tahrirlash",
                     callback_data=f"txedit_{txn.id}",
-                    style="Primary",
                 ),
                 InlineKeyboardButton(
                     text=f"🗑 {i}. O'chirish",
                     callback_data=f"txdel_{txn.id}",
-                    style="Danger",
                 ),
             ])
 
@@ -100,12 +96,10 @@ async def handle_delete(callback: CallbackQuery):
         InlineKeyboardButton(
             text="✅ Ha, o'chirish",
             callback_data=f"txdelyes_{txn_id}",
-            style="Danger",
         ),
         InlineKeyboardButton(
             text="❌ Yo'q",
             callback_data="txdelno",
-            style="Primary",
         ),
     ]])
     await callback.message.answer(
@@ -157,28 +151,24 @@ async def handle_edit_start(callback: CallbackQuery, state: FSMContext):
             InlineKeyboardButton(
                 text="💵 Summani o'zgartirish",
                 callback_data="txfield_amount",
-                style="Primary",
             ),
         ],
         [
             InlineKeyboardButton(
                 text="📂 Kategoriyani o'zgartirish",
                 callback_data="txfield_category",
-                style="Primary",
             ),
         ],
         [
             InlineKeyboardButton(
                 text="🔄 Turni o'zgartirish (Kirim↔Chiqim)",
                 callback_data="txfield_type",
-                style="Primary",
             ),
         ],
         [
             InlineKeyboardButton(
                 text="❌ Bekor qilish",
                 callback_data="txfield_cancel",
-                style="Danger",
             ),
         ],
     ])
@@ -252,7 +242,6 @@ async def handle_edit_category(callback: CallbackQuery, state: FSMContext):
             row.append(InlineKeyboardButton(
                 text=f"{emoji} {cat_name}",
                 callback_data=f"txcat_{cat_key}",
-                style="Success",
             ))
         rows.append(row)
 
