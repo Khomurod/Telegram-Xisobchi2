@@ -1,8 +1,12 @@
 import csv
 import io
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile
+from aiogram.types import (
+    BufferedInputFile,
+    ReplyKeyboardMarkup, KeyboardButton,
+)
+from aiogram.enums import ButtonStyle
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
@@ -13,6 +17,28 @@ from app.utils.logger import setup_logger
 
 logger = setup_logger("commands")
 router = Router()
+
+
+# ── Persistent reply keyboard ────────────────────────────────
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(text="💰 Balans", style=ButtonStyle.PRIMARY),
+            KeyboardButton(text="📊 Hisobot", style=ButtonStyle.PRIMARY),
+        ],
+        [
+            KeyboardButton(text="📅 Bugun", style=ButtonStyle.SUCCESS),
+            KeyboardButton(text="📅 Hafta", style=ButtonStyle.SUCCESS),
+        ],
+        [
+            KeyboardButton(text="✏️ Tarix", style=ButtonStyle.PRIMARY),
+            KeyboardButton(text="📤 Export", style=ButtonStyle.SUCCESS),
+        ],
+        [KeyboardButton(text="❓ Yordam")],
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Yozing yoki tugmani bosing...",
+)
 
 
 @router.message(Command("start"))
@@ -49,7 +75,7 @@ async def cmd_start(message: types.Message):
             '📌 _"transport 20 ming"_\n'
             '📌 _"kirim 3 million maosh"_'
         )
-        await message.answer(welcome, parse_mode="Markdown")
+        await message.answer(welcome, parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
         logger.info(f"User {message.from_user.id} started the bot")
 
     except Exception as e:
@@ -83,7 +109,7 @@ async def cmd_help(message: types.Message):
         "💊 Sog'liq | 👔 Kiyim | 📱 Aloqa\n"
         "📚 Ta'lim | 🎬 Ko'ngil ochar | 📦 Boshqa"
     )
-    await message.answer(help_text, parse_mode="Markdown")
+    await message.answer(help_text, parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
 
 
 @router.message(Command("balans"))
@@ -253,3 +279,38 @@ async def cmd_export(message: types.Message):
     except Exception as e:
         logger.error(f"Error in /export: {e}")
         await message.answer("Tizimda xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring.")
+
+
+# ── Reply keyboard button handlers ──────────────────────────
+# These intercept the button text before the catch-all text parser.
+
+@router.message(F.text == "💰 Balans")
+async def btn_balans(message: types.Message):
+    await cmd_balance(message)
+
+@router.message(F.text == "📊 Hisobot")
+async def btn_hisobot(message: types.Message):
+    await cmd_full_report(message)
+
+@router.message(F.text == "📅 Bugun")
+async def btn_bugun(message: types.Message):
+    await cmd_today(message)
+
+@router.message(F.text == "📅 Hafta")
+async def btn_hafta(message: types.Message):
+    await cmd_week(message)
+
+@router.message(F.text == "✏️ Tarix")
+async def btn_tarix(message: types.Message):
+    # Import here to avoid circular imports — edit.router has its own command
+    from app.handlers.edit import cmd_history
+    await cmd_history(message)
+
+@router.message(F.text == "📤 Export")
+async def btn_export(message: types.Message):
+    await cmd_export(message)
+
+@router.message(F.text == "❓ Yordam")
+async def btn_yordam(message: types.Message):
+    await cmd_help(message)
+
