@@ -16,7 +16,21 @@ if "sqlite" in db_url:
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
 
-engine = create_async_engine(db_url, echo=False)
+# PostgreSQL (Supabase pooler) needs:
+#   ssl='require'            — pooler enforces TLS
+#   statement_cache_size=0   — PgBouncer doesn't support prepared statements
+if "postgresql" in db_url or "postgres" in db_url:
+    engine = create_async_engine(
+        db_url,
+        echo=False,
+        connect_args={
+            "ssl": "require",
+            "statement_cache_size": 0,
+        },
+    )
+else:
+    engine = create_async_engine(db_url, echo=False)
+
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
