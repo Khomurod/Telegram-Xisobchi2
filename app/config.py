@@ -14,7 +14,19 @@ class Settings:
     MODE: str = os.getenv("MODE", "polling")  # "polling" or "webhook"
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/xisobchi.db")
+    # Railway provides DATABASE_URL as postgresql://...
+    # SQLAlchemy async needs postgresql+asyncpg://...
+    # This auto-conversion makes it work without manual env var editing.
+    @property
+    def DATABASE_URL(self) -> str:
+        raw = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/xisobchi.db")
+        # Railway/Heroku use postgres:// or postgresql:// — convert to async driver
+        if raw.startswith("postgres://"):
+            return raw.replace("postgres://", "postgresql+asyncpg://", 1)
+        if raw.startswith("postgresql://"):
+            return raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return raw
+
 
     # Google Cloud Speech-to-Text
     GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")

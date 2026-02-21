@@ -40,6 +40,12 @@ target_metadata = Base.metadata
 # Falls back to the alembic.ini value if DATABASE_URL is not set.
 database_url = os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 
+# Railway/Heroku give postgres:// or postgresql:// — async SQLAlchemy needs +asyncpg
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif database_url and database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 # Alembic's async engine does not support aiosqlite/asyncpg drivers directly
 # via the config file — we set it programmatically here.
 config.set_main_option("sqlalchemy.url", database_url)
