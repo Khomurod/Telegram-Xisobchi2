@@ -209,7 +209,7 @@ async def transcribe_audio(file_path: str) -> TranscriptionResult:
     """
     logger.info(f"Transcribing audio: {file_path}")
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, _transcribe_sync, file_path)
         return result
 

@@ -118,18 +118,30 @@ async def handle_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("txdelyes_"))
 async def handle_delete_confirm(callback: CallbackQuery):
-    """Delete the transaction after confirmation."""
+    """Delete the transaction after confirmation (with ownership check)."""
     txn_id = int(callback.data.replace("txdelyes_", ""))
     try:
         async with async_session() as session:
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_telegram_id(callback.from_user.id)
             txn_repo = TransactionRepository(session)
-            deleted = await txn_repo.delete(txn_id)
+            txn = await txn_repo.get_by_id(txn_id)
 
-        if deleted:
-            await callback.message.edit_text("✅ Operatsiya o'chirildi.")
-            logger.info(f"Transaction {txn_id} deleted by user {callback.from_user.id}")
-        else:
-            await callback.message.edit_text("⚠️ Operatsiya topilmadi.")
+            if not txn:
+                await callback.message.edit_text("⚠️ Operatsiya topilmadi.")
+                await callback.answer()
+                return
+
+            # Ownership check: ensure txn belongs to this user
+            if not user or txn.user_id != user.id:
+                await callback.message.edit_text("⚠️ Bu operatsiya sizga tegishli emas.")
+                await callback.answer()
+                return
+
+            await txn_repo.delete(txn_id)
+
+        await callback.message.edit_text("✅ Operatsiya o'chirildi.")
+        logger.info(f"Transaction {txn_id} deleted by user {callback.from_user.id}")
     except Exception as e:
         logger.error(f"Delete error: {e}", exc_info=True)
         await callback.message.edit_text("⚠️ Xatolik yuz berdi.")
@@ -200,10 +212,19 @@ async def handle_toggle_type(callback: CallbackQuery, state: FSMContext):
 
     try:
         async with async_session() as session:
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_telegram_id(callback.from_user.id)
             txn_repo = TransactionRepository(session)
             txn = await txn_repo.get_by_id(txn_id)
             if not txn:
                 await callback.message.edit_text("⚠️ Operatsiya topilmadi.")
+                await state.clear()
+                await callback.answer()
+                return
+
+            # Ownership check
+            if not user or txn.user_id != user.id:
+                await callback.message.edit_text("⚠️ Bu operatsiya sizga tegishli emas.")
                 await state.clear()
                 await callback.answer()
                 return
@@ -277,7 +298,18 @@ async def handle_category_picked(callback: CallbackQuery, state: FSMContext):
 
     try:
         async with async_session() as session:
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_telegram_id(callback.from_user.id)
             txn_repo = TransactionRepository(session)
+            txn = await txn_repo.get_by_id(txn_id)
+
+            # Ownership check
+            if not txn or not user or txn.user_id != user.id:
+                await callback.message.edit_text("⚠️ Bu operatsiya sizga tegishli emas.")
+                await state.clear()
+                await callback.answer()
+                return
+
             await txn_repo.update(txn_id, category=cat_key)
 
         cat_emoji = CATEGORY_EMOJI.get(cat_key, "📦")
@@ -331,10 +363,21 @@ async def handle_enter_value(message: Message, state: FSMContext):
 
         try:
             async with async_session() as session:
+                user_repo = UserRepository(session)
+                user = await user_repo.get_by_telegram_id(message.from_user.id)
                 txn_repo = TransactionRepository(session)
+                txn = await txn_repo.get_by_id(txn_id)
+
+                # Ownership check
+                if not txn or not user or txn.user_id != user.id:
+                    await message.answer("⚠️ Bu operatsiya sizga tegishli emas.")
+                    await state.clear()
+                    return
+
+                currency = txn.currency  # Use the actual currency
                 await txn_repo.update(txn_id, amount=amount)
 
-            amount_str = format_amount(amount, "UZS")
+            amount_str = format_amount(amount, currency)
             await message.answer(
                 f"✅ Summa o'zgartirildi: 💵 *{amount_str}*",
                 parse_mode="Markdown",
