@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.database.models import User
 from app.database.repositories.base import BaseRepository
 
@@ -41,3 +41,21 @@ class UserRepository(BaseRepository):
                 await self.session.refresh(user)
         return user
 
+    async def update_phone(self, telegram_id: int, phone_number: str) -> None:
+        """Save phone number collected during onboarding."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            user.phone_number = phone_number
+            await self.session.commit()
+
+    async def update_name(self, telegram_id: int, first_name: str) -> None:
+        """Update the user's display name (from onboarding input)."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            user.first_name = first_name
+            await self.session.commit()
+
+    async def get_total_count(self) -> int:
+        """Return total number of registered users."""
+        result = await self.session.execute(select(func.count(User.id)))
+        return result.scalar() or 0

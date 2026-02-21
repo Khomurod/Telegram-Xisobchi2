@@ -2,11 +2,7 @@ import csv
 import io
 from aiogram import Router, types, F
 from aiogram.filters import Command
-from aiogram.types import (
-    BufferedInputFile,
-    ReplyKeyboardMarkup, KeyboardButton,
-)
-from aiogram.enums import ButtonStyle
+from aiogram.types import BufferedInputFile
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
@@ -14,73 +10,11 @@ from app.services.report import ReportService
 from app.constants import CATEGORY_EMOJI
 from app.utils.formatting import format_amount
 from app.utils.logger import setup_logger
+from app.handlers.onboarding import MAIN_KEYBOARD
 
 logger = setup_logger("commands")
 router = Router()
 
-
-# ── Persistent reply keyboard ────────────────────────────────
-MAIN_KEYBOARD = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton(text="💰 Balans", style=ButtonStyle.PRIMARY),
-            KeyboardButton(text="📊 Hisobot", style=ButtonStyle.PRIMARY),
-        ],
-        [
-            KeyboardButton(text="📅 Bugun", style=ButtonStyle.SUCCESS),
-            KeyboardButton(text="📅 Hafta", style=ButtonStyle.SUCCESS),
-        ],
-        [
-            KeyboardButton(text="✏️ Tarix", style=ButtonStyle.PRIMARY),
-            KeyboardButton(text="📤 Export", style=ButtonStyle.SUCCESS),
-        ],
-        [KeyboardButton(text="❓ Yordam")],
-    ],
-    resize_keyboard=True,
-    input_field_placeholder="Yozing yoki tugmani bosing...",
-)
-
-
-@router.message(Command("start"))
-async def cmd_start(message: types.Message):
-    """Register user and show welcome message."""
-    try:
-        async with async_session() as session:
-            user_repo = UserRepository(session)
-            await user_repo.get_or_create(
-                telegram_id=message.from_user.id,
-                first_name=message.from_user.first_name,
-                username=message.from_user.username,
-            )
-
-        welcome = (
-            "🎙 *Xisobchi Bot*ga xush kelibsiz!\n\n"
-            "Men sizning moliyaviy yordamchingizman. "
-            "Ovozli xabar yoki matn yuboring va men avtomatik ravishda "
-            "kirim yoki chiqimingizni qayd etaman.\n\n"
-            "📝 *Buyruqlar:*\n"
-            "/balans — Umumiy balans\n"
-            "/bugun — Bugungi operatsiyalar\n"
-            "/hafta — Haftalik hisobot\n"
-            "/oy — Oylik hisobot\n"
-            "/hisobot — To'liq hisobot\n"
-            "/tarix — ✏️ Operatsiyalarni ko'rish va tahrirlash\n"
-            "/bekor — Oxirgi operatsiyani bekor qilish\n"
-            "/export — CSV fayl sifatida eksport\n"
-            "/yordam — Barcha buyruqlar\n\n"
-            "🎤 *Misol:* Ovozli xabar yuboring:\n"
-            '📌 _"Ovqatga 50 ming so\'m sarfladim"_\n'
-            '📌 _"Maosh oldim 5 million so\'m"_\n\n'
-            "💬 *Matn:* Yozib ham yuborishingiz mumkin:\n"
-            '📌 _"transport 20 ming"_\n'
-            '📌 _"kirim 3 million maosh"_'
-        )
-        await message.answer(welcome, parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
-        logger.info(f"User {message.from_user.id} started the bot")
-
-    except Exception as e:
-        logger.error(f"Error in /start: {e}")
-        await message.answer("Tizimda xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring.")
 
 
 @router.message(Command("yordam"))
