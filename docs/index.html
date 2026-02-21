@@ -674,7 +674,8 @@
       if (!adminToken) { err.textContent = 'Token kiritilmagan'; err.style.display = 'block'; return; }
       try {
         const res = await fetch(API + '/admin/users?limit=1', { headers: { 'X-Admin-Token': adminToken } });
-        if (res.status === 401) { err.textContent = 'Noto\'g\'ri token'; err.style.display = 'block'; adminToken = ''; return; }
+        if (res.status === 401) { err.textContent = 'Noto\'g\'ri token'; err.style.display = 'block'; adminToken = ''; sessionStorage.removeItem('admin_token'); return; }
+        if (!res.ok) { err.textContent = 'Server javob bermadi (' + res.status + '). Render qayta deploy bo\'lyaptimi?'; err.style.display = 'block'; return; }
         sessionStorage.setItem('admin_token', adminToken);
         document.getElementById('admin-gate').style.display = 'none';
         document.getElementById('admin-dash').style.display = 'block';
@@ -696,8 +697,10 @@
       body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Yuklanmoqda…</td></tr>';
       try {
         const res = await fetch(API + '/admin/users?page=' + page + '&limit=15', { headers: { 'X-Admin-Token': adminToken } });
+        if (!res.ok) throw new Error('Server: ' + res.status);
         const d = await res.json();
-        const totalPages = Math.ceil(d.total / d.limit);
+        if (!d.users) throw new Error('Kutilmagan javob formati');
+        const totalPages = Math.ceil(d.total / d.limit) || 1;
         body.innerHTML = d.users.map((u, i) => `<tr>
       <td style="color:var(--muted)">${(page - 1) * d.limit + i + 1}</td>
       <td>${u.first_name || '—'}</td>
