@@ -97,10 +97,11 @@ EXPENSE_KEYWORDS = [
 
 INCOME_KEYWORDS = [
     "kirim", "tushum",
-    "maosh", "oylik",
+    "maosh", "oylik", "ish haqi",  # salary words alone = income
     "tushdi", "keldi",
     "daromad",
     "ishladim", "ishladi",
+    "topim", "topdim", "topdi",
     # Russian
     "получил", "получила", "получили",
     "заработал", "заработала", "заработали",
@@ -234,13 +235,14 @@ def parse_transaction(text: str) -> Optional[ParsedTransaction]:
 
 def _detect_type(text: str) -> Optional[str]:
     """Detect income vs expense from keywords."""
-    # Check compound phrases first (highest priority)
-    for phrase in EXPENSE_COMPOUNDS:
-        if phrase in text:
-            return "expense"
+    # Check income compounds FIRST — they override bare keywords like 'oldim'
+    # e.g. "oylik oldim" must beat "oldim" in EXPENSE_KEYWORDS
     for phrase in INCOME_COMPOUNDS:
         if phrase in text:
             return "income"
+    for phrase in EXPENSE_COMPOUNDS:
+        if phrase in text:
+            return "expense"
 
     # Then single keywords
     for kw in EXPENSE_KEYWORDS:

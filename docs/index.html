@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xisobchi Bot — Statistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --income:    #3fb950;
+      --expense:   #f85149;
+      --accent:    #58a6ff;
+      --accent2:   #bc8cff;
+      --gold:      #d29922;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 16px 60px;
+    }
+
+    /* ── Header ── */
+    header {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 0 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo {
+      width: 52px; height: 52px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.5px; }
+    header p  { font-size: 0.875rem; color: var(--muted); margin-top: 2px; }
+    .live-badge {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.75rem; color: var(--income);
+      background: rgba(63,185,80,.12);
+      border: 1px solid rgba(63,185,80,.3);
+      padding: 4px 10px; border-radius: 20px;
+    }
+    .live-dot {
+      width: 7px; height: 7px;
+      background: var(--income);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .3; }
+    }
+
+    /* ── Grid ── */
+    .main { max-width: 900px; margin: 0 auto; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 20px;
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .card.blue::before   { background: var(--accent); }
+    .card.green::before  { background: var(--income); }
+    .card.red::before    { background: var(--expense); }
+    .card.purple::before { background: var(--accent2); }
+
+    .card-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .card-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+    .card-value {
+      font-size: 2rem; font-weight: 800;
+      margin-top: 4px;
+      letter-spacing: -1px;
+      transition: color .3s;
+    }
+    .card.green .card-value { color: var(--income); }
+    .card.red   .card-value { color: var(--expense); }
+    .card.blue  .card-value { color: var(--accent); }
+    .card.purple.card-value { color: var(--accent2); }
+    .card-sub   { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+
+    /* ── Section box ── */
+    .box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .box-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Category bars ── */
+    .cat-row { margin-bottom: 14px; }
+    .cat-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .cat-name  { font-size: 0.875rem; font-weight: 500; }
+    .cat-count { font-size: 0.8rem; color: var(--muted); }
+    .bar-track { background: rgba(255,255,255,.07); border-radius: 6px; height: 8px; }
+    .bar-fill  {
+      height: 100%; border-radius: 6px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 1s cubic-bezier(.4,0,.2,1);
+      width: 0%;
+    }
+
+    /* ── Balance meter ── */
+    .balance-row {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .balance-label { font-size: 0.8rem; color: var(--muted); width: 56px; flex-shrink: 0; }
+    .balance-bar   { flex: 1; height: 10px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,.07); }
+    .balance-income  { height: 100%; border-radius: 6px; background: var(--income); transition: width 1s; width: 0%; }
+    .balance-expense { height: 100%; border-radius: 6px; background: var(--expense); transition: width 1s; width: 0%; }
+    .balance-val   { font-size: 0.8rem; font-weight: 600; width: 90px; text-align: right; }
+
+    /* ── Footer ── */
+    footer { text-align: center; color: var(--muted); font-size: .75rem; margin-top: 40px; }
+    footer a { color: var(--accent); text-decoration: none; }
+
+    /* ── Loading / error ── */
+    .status-msg {
+      text-align: center; color: var(--muted);
+      font-size: 0.9rem; padding: 40px;
+      animation: fadeIn .4s;
+    }
+    @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+    #refresh-btn {
+      display: block; margin: 16px auto 0;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 8px;
+      padding: 8px 20px; font-size: .85rem;
+      cursor: pointer; font-family: inherit;
+      transition: opacity .2s;
+    }
+    #refresh-btn:hover { opacity: .85; }
+
+    #last-updated { color: var(--muted); font-size: .72rem; text-align: center; margin-top: 12px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📊</div>
+  <div>
+    <h1>Xisobchi Bot</h1>
+    <p>Real-time statistics dashboard</p>
+  </div>
+  <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+</header>
+
+<main class="main" id="main">
+  <div class="status-msg" id="loading">⏳ Loading stats…</div>
+</main>
+
+<footer>
+  Built with ❤️ · Powered by <a href="https://supabase.com" target="_blank">Supabase</a> &amp;
+  <a href="https://render.com" target="_blank">Render</a>
+</footer>
+
+<script>
+  // ── CONFIG ────────────────────────────────────────────────────
+  const API = 'https://telegram-xisobchi2.onrender.com/stats';
+
+  // ── Formatting helpers ────────────────────────────────────────
+  const fmt = n => new Intl.NumberFormat('uz').format(Math.round(n));
+  const fmtM = n => {
+    if (n >= 1e9) return (n/1e9).toFixed(1) + ' mlrd';
+    if (n >= 1e6) return (n/1e6).toFixed(1) + ' mln';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + ' ming';
+    return fmt(n);
+  };
+
+  // ── Category emoji map ────────────────────────────────────────
+  const CAT_EMOJI = {
+    'oziq-ovqat': '🛒','transport':'🚗','uy-joy':'🏠',
+    "sog'liq":'💊','kiyim':'👗','aloqa':'📱',"ta'lim":'📚',
+    "ko'ngil ochar":'🎬',"o'tkazma":'💸','maosh':'💰','boshqa':'📌',
+  };
+  const emoji = c => CAT_EMOJI[c] || '💳';
+
+  // ── Animate counter ───────────────────────────────────────────
+  function animateCount(el, target, duration = 900, formatter = fmt) {
+    const start = performance.now();
+    const from = 0;
+    const step = ts => {
+      const p = Math.min((ts - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = formatter(from + (target - from) * ease);
+      if (p < 1) requestAnimationFrame(step);
+      else el.textContent = formatter(target);
+    };
+    requestAnimationFrame(step);
+  }
+
+  // ── Render dashboard ──────────────────────────────────────────
+  function render(data) {
+    const main = document.getElementById('main');
+    const net  = data.total_income_uzs - data.total_expense_uzs;
+    const maxInEx = Math.max(data.total_income_uzs, data.total_expense_uzs) || 1;
+    const maxCat  = data.top_categories.length ? data.top_categories[0].count : 1;
+
+    main.innerHTML = `
+      <div class="cards">
+        <div class="card blue">
+          <div class="card-icon">👥</div>
+          <div class="card-label">Foydalanuvchilar</div>
+          <div class="card-value" id="v-users">0</div>
+          <div class="card-sub">Jami ro'yxatdan o'tganlar</div>
+        </div>
+        <div class="card purple">
+          <div class="card-icon">📋</div>
+          <div class="card-label">Operatsiyalar</div>
+          <div class="card-value" id="v-txns">0</div>
+          <div class="card-sub">Jami yozuvlar</div>
+        </div>
+        <div class="card green">
+          <div class="card-icon">💵</div>
+          <div class="card-label">Jami Kirim</div>
+          <div class="card-value" id="v-income">0</div>
+          <div class="card-sub">UZS</div>
+        </div>
+        <div class="card red">
+          <div class="card-icon">💸</div>
+          <div class="card-label">Jami Chiqim</div>
+          <div class="card-value" id="v-expense">0</div>
+          <div class="card-sub">UZS</div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="box-title">💹 Kirim vs Chiqim</div>
+        <div style="margin-bottom:14px" class="balance-row">
+          <span class="balance-label" style="color:var(--income)">Kirim</span>
+          <div class="balance-bar"><div class="balance-income" id="bar-income"></div></div>
+          <span class="balance-val" style="color:var(--income)" id="lbl-income">—</span>
+        </div>
+        <div class="balance-row">
+          <span class="balance-label" style="color:var(--expense)">Chiqim</span>
+          <div class="balance-bar"><div class="balance-expense" id="bar-expense"></div></div>
+          <span class="balance-val" style="color:var(--expense)" id="lbl-expense">—</span>
+        </div>
+        <div style="text-align:right;margin-top:16px;font-size:.85rem;color:${net>=0?'var(--income)':'var(--expense)'}">
+          Sof: <strong id="v-net">—</strong> UZS
+        </div>
+      </div>
+
+      ${data.top_categories.length ? `
+      <div class="box">
+        <div class="box-title">📂 TOP Kategoriyalar</div>
+        ${data.top_categories.map((c,i) => `
+          <div class="cat-row">
+            <div class="cat-header">
+              <span class="cat-name">${emoji(c.name)} ${c.name}</span>
+              <span class="cat-count">${c.count} ta</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" id="cf-${i}" data-pct="${Math.round(c.count/maxCat*100)}"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>` : ''}
+
+      <button id="refresh-btn">🔄 Yangilash</button>
+      <div id="last-updated">Yangilangan: ${new Date().toLocaleTimeString('uz')}</div>
+    `;
+
+    // Animate numbers
+    animateCount(document.getElementById('v-users'),   data.total_users,   800);
+    animateCount(document.getElementById('v-txns'),    data.total_transactions, 800);
+    animateCount(document.getElementById('v-income'),  data.total_income_uzs,  1000, fmtM);
+    animateCount(document.getElementById('v-expense'), data.total_expense_uzs, 1000, fmtM);
+
+    setTimeout(() => {
+      document.getElementById('bar-income').style.width  =
+        (data.total_income_uzs / maxInEx * 100) + '%';
+      document.getElementById('bar-expense').style.width =
+        (data.total_expense_uzs / maxInEx * 100) + '%';
+      document.getElementById('lbl-income').textContent  = fmtM(data.total_income_uzs);
+      document.getElementById('lbl-expense').textContent = fmtM(data.total_expense_uzs);
+      document.getElementById('v-net').textContent = fmtM(Math.abs(net));
+
+      data.top_categories.forEach((_,i) => {
+        const el = document.getElementById('cf-'+i);
+        if (el) el.style.width = el.dataset.pct + '%';
+      });
+    }, 100);
+
+    document.getElementById('refresh-btn').addEventListener('click', load);
+  }
+
+  // ── Load data ─────────────────────────────────────────────────
+  async function load() {
+    const main = document.getElementById('main');
+    try {
+      const res  = await fetch(API);
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      render(data);
+    } catch(e) {
+      main.innerHTML = `
+        <div class="status-msg">
+          ⚠️ Ma'lumot yuklanmadi<br>
+          <small style="color:var(--muted)">${e.message}</small>
+          <button id="refresh-btn" style="margin-top:14px" onclick="load()">🔄 Qayta urinish</button>
+        </div>`;
+    }
+  }
+
+  load();
+  // Auto-refresh every 60 seconds
+  setInterval(load, 60_000);
+</script>
+</body>
+</html>

@@ -3,10 +3,14 @@ import os
 import glob
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from aiogram.types import Update
+from sqlalchemy import select, func
 from app.bot import bot, dp
 from app.config import settings
-from app.database.connection import init_db
+from app.database.connection import init_db, async_session
+from app.database.models import User, Transaction
 from app.utils.logger import setup_logger
 
 logger = setup_logger("main")
@@ -57,12 +61,64 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Xisobchi Bot", lifespan=lifespan)
 
+# Allow GitHub Pages (and any origin) to call /stats
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/")
 async def health():
-    """Health check endpoint for Railway."""
+    """Health check endpoint."""
     return {"status": "ok", "bot": "Xisobchi"}
 
+
+@app.get("/stats")
+async def stats():
+    """Public stats endpoint for the GitHub Pages dashboard.
+    Returns only aggregate counts — no personal user data.
+    """
+    try:
+        async with async_session() as session:
+            total_users = (await session.execute(
+                select(func.count()).select_from(User)
+            )).scalar() or 0
+
+            total_txns = (await session.execute(
+                select(func.count()).select_from(Transaction)
+            )).scalar() or 0
+
+            total_income = (await session.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0))
+                .where(Transaction.type == "income", Transaction.currency == "UZS")
+            )).scalar() or 0
+
+            total_expense = (await session.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0))
+                .where(Transaction.type == "expense", Transaction.currency == "UZS")
+            )).scalar() or 0
+
+            # Top 5 categories by transaction count
+            cat_rows = (await session.execute(
+                select(Transaction.category, func.count().label("cnt"))
+                .group_by(Transaction.category)
+                .order_by(func.count().desc())
+                .limit(5)
+            )).all()
+
+        return JSONResponse({
+            "total_users": total_users,
+            "total_transactions": total_txns,
+            "total_income_uzs": float(total_income),
+            "total_expense_uzs": float(total_expense),
+            "top_categories": [{"name": r.category, "count": r.cnt} for r in cat_rows],
+        })
+    except Exception as e:
+        logger.error(f"Stats error: {e}", exc_info=True)
+        return JSONResponse({"error": "stats unavailable"}, status_code=500)
 
 @app.post(settings.WEBHOOK_PATH)
 async def webhook(request: Request):
