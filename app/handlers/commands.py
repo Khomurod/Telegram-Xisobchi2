@@ -245,22 +245,16 @@ async def btn_recommend(message: types.Message):
     """Show referral promo and share button."""
     import urllib.parse
 
-    bot_link = "https://t.me/xisobchiman1_bot"
-
     share_text = (
         "🎙 Xisobchi Bot — shaxsiy moliyaviy yordamchi!\n\n"
         "✅ Ovozli yoki matnli xabar yuboring — bot avtomatik kirim/chiqimni qayd etadi\n"
         "✅ Sun'iy intellekt kategoriyani o'zi aniqlaydi\n"
         "✅ Balans, hisobot, eksport — bir tugma bilan\n"
         "✅ 100% bepul, 100% xavfsiz\n\n"
-        "🚀 Hoziroq boshlang 👇\n"
+        "🚀 Hoziroq sinab ko'ring 👉 @xisobchiman1_bot"
     )
 
-    share_url = (
-        f"https://t.me/share/url"
-        f"?url={urllib.parse.quote(bot_link)}"
-        f"&text={urllib.parse.quote(share_text)}"
-    )
+    share_url = f"https://t.me/share/url?text={urllib.parse.quote(share_text)}"
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
