@@ -240,3 +240,41 @@ async def btn_export(message: types.Message):
 async def btn_yordam(message: types.Message):
     await cmd_help(message)
 
+@router.message(F.text == "🤝 Tavsiya")
+async def btn_recommend(message: types.Message):
+    """Show referral promo and share button."""
+    import urllib.parse
+
+    bot_info = await message.bot.get_me()
+    bot_link = f"https://t.me/{bot_info.username}"
+
+    share_text = (
+        "🎙 Xisobchi Bot — shaxsiy moliyaviy yordamchi!\n\n"
+        "✅ Ovozli yoki matnli xabar yuboring — bot avtomatik kirim/chiqimni qayd etadi\n"
+        "✅ Sun'iy intellekt kategoriyani o'zi aniqlaydi\n"
+        "✅ Balans, hisobot, eksport — bir tugma bilan\n"
+        "✅ 100% bepul, 100% xavfsiz\n\n"
+        "🚀 Hoziroq boshlang 👇\n"
+    )
+
+    share_url = (
+        f"https://t.me/share/url"
+        f"?url={urllib.parse.quote(bot_link)}"
+        f"&text={urllib.parse.quote(share_text)}"
+    )
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📤 Do'stga yuborish", url=share_url)],
+    ])
+
+    await message.answer(
+        "🤝 *Do'stlaringizga tavsiya qiling!*\n\n"
+        "Pastdagi tugmani bosing — do'stingizni tanlang va\n"
+        "Xisobchi Bot haqida chiroyli xabar yuboriladi. 💌\n\n"
+        "Har bir tavsiya muhim — rahmat! 🙏",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
+    logger.info(f"User {message.from_user.id} opened referral share")

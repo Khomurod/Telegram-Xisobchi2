@@ -46,7 +46,10 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
             KeyboardButton(text="✏️ Tarix", style=ButtonStyle.PRIMARY),
             KeyboardButton(text="📤 Export", style=ButtonStyle.SUCCESS),
         ],
-        [KeyboardButton(text="❓ Yordam")],
+        [
+            KeyboardButton(text="❓ Yordam"),
+            KeyboardButton(text="🤝 Tavsiya", style=ButtonStyle.SUCCESS),
+        ],
     ],
     resize_keyboard=True,
     input_field_placeholder="Yozing yoki tugmani bosing...",
