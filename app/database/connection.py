@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import sqlite3
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.config import settings
 from app.utils.logger import setup_logger
@@ -40,50 +41,79 @@ def _log_alembic_output(result: subprocess.CompletedProcess) -> None:
             logger.info(f"[alembic] {line}")
 
 
+def _sqlite_tables_exist() -> bool:
+    """
+    Check if the users table exists in the SQLite database.
+    Used to distinguish between:
+      - A fresh empty DB  → tables don't exist → run upgrade head to CREATE
+      - A pre-Alembic DB  → tables exist       → stamp then done
+    Only called for SQLite; PostgreSQL uses a different path.
+    """
+    db_path = db_url.split("///")[-1]
+    if not os.path.exists(db_path):
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+        )
+        exists = cursor.fetchone() is not None
+        conn.close()
+        return exists
+    except Exception:
+        return False
+
+
 async def init_db() -> None:
     """
     Apply all pending Alembic migrations on startup.
 
-    This is the core of data safety:
-    - On a fresh DB: runs the initial migration and creates all tables.
-    - On an existing DB that was created before Alembic was introduced:
-      auto-detects this (no alembic_version table) and 'stamps' the schema
-      as already at head without running any DDL — preserving all user data.
-    - On a DB already managed by Alembic: applies only new migrations.
+    Three scenarios handled:
+    1. Fresh DB (no file, or file with no tables)
+       → Run 'alembic upgrade head' to CREATE tables from the initial migration.
+    2. Existing DB with tables but no alembic_version (pre-Alembic deploy)
+       → Stamp as head to register existing schema WITHOUT running DDL.
+         This preserves all existing user data.
+    3. DB already managed by Alembic
+       → Run 'alembic upgrade head' — applies only NEW migrations, no-op if current.
 
     Never drops, truncates, or modifies existing data.
     """
     logger.info("Checking database migrations...")
 
-    # Check current Alembic revision
-    check = _run_alembic(["current"])
-    current_output = check.stdout + check.stderr
+    is_postgres = "postgresql" in db_url or "postgres" in db_url
 
-    # Detect if the database was created before Alembic was introduced.
-    # In that case, 'alembic current' reports no revision (empty or "(head)" only
-    # if already stamped). We look for a missing alembic_version table signal.
-    is_unmanaged = (
-        check.returncode != 0
-        or "alembic_version" not in current_output
-        and "(head)" not in current_output
-        and "ab1e558f6c71" not in current_output
-    )
+    if not is_postgres:
+        # For SQLite: physically check if tables already exist
+        tables_exist = _sqlite_tables_exist()
 
-    if is_unmanaged:
-        logger.info(
-            "Existing database detected (no Alembic version table). "
-            "Stamping as current head to preserve all data..."
-        )
-        stamp = _run_alembic(["stamp", "head"])
-        _log_alembic_output(stamp)
-        if stamp.returncode != 0:
-            logger.error("Alembic stamp failed — check logs.")
-            raise RuntimeError("Database stamp failed.")
-        logger.info("Database stamped at head. Future schema changes will migrate safely.")
-        return
+        if tables_exist:
+            # Check if Alembic has already registered this DB
+            check = _run_alembic(["current"])
+            current_output = (check.stdout + check.stderr)
+            already_managed = "(head)" in current_output or "ab1e558f6c71" in current_output
 
-    # Normal path: run any pending migrations
-    logger.info("Running pending migrations (alembic upgrade head)...")
+            if not already_managed:
+                # Pre-Alembic DB with data: stamp without touching tables
+                logger.info(
+                    "Existing database detected (tables present, no Alembic version). "
+                    "Stamping as current head to preserve all data..."
+                )
+                stamp = _run_alembic(["stamp", "head"])
+                _log_alembic_output(stamp)
+                if stamp.returncode != 0:
+                    logger.error("Alembic stamp failed — check logs.")
+                    raise RuntimeError("Database stamp failed.")
+                logger.info("Database stamped. Future schema changes will migrate safely.")
+                return
+            # else: fall through to upgrade head (may apply new migrations)
+        else:
+            logger.info("Fresh database detected — running initial migration to create tables...")
+
+    # Normal path for all cases:
+    # - Fresh DB: creates tables via initial migration
+    # - Already-stamped DB: no-op (or applies new migrations)
+    # - PostgreSQL: always runs upgrade head
     result = _run_alembic(["upgrade", "head"])
     _log_alembic_output(result)
 
