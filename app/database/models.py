@@ -22,7 +22,7 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
     first_name = Column(String(255), nullable=True)
     username = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=now_uzt)
+    created_at = Column(DateTime(timezone=True), default=now_uzt)
 
     transactions = relationship("Transaction", back_populates="user", lazy="selectin")
 
@@ -42,7 +42,7 @@ class Transaction(Base):
     currency = Column(String(10), nullable=False, default="UZS")
     category = Column(String(100), nullable=False, default="boshqa")
     description = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=now_uzt)
+    created_at = Column(DateTime(timezone=True), default=now_uzt)
 
     user = relationship("User", back_populates="transactions")
 
