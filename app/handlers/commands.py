@@ -245,8 +245,7 @@ async def btn_recommend(message: types.Message):
     """Show referral promo and share button."""
     import urllib.parse
 
-    bot_info = await message.bot.get_me()
-    bot_link = f"https://t.me/{bot_info.username}"
+    bot_link = "https://t.me/xisobchiman1_bot"
 
     share_text = (
         "🎙 Xisobchi Bot — shaxsiy moliyaviy yordamchi!\n\n"
