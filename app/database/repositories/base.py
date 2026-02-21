@@ -1,8 +1,8 @@
-    from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
-    class BaseRepository:
-        """Base repository providing common database session access."""
+class BaseRepository:
+    """Base repository providing common database session access."""
 
-        def __init__(self, session: AsyncSession):
-            self.session = session
+    def __init__(self, session: AsyncSession):
+        self.session = session
