@@ -34,21 +34,22 @@ def _check_rate_limit(user_id: int) -> bool:
     window = 60.0  # 1 minute
     limit = settings.VOICE_RATE_LIMIT
 
-    # Remove timestamps older than 1 minute
-    timestamps = _user_timestamps[user_id]
-    _user_timestamps[user_id] = [t for t in timestamps if now - t < window]
+    # Use .get() to avoid defaultdict auto-creating an empty entry
+    recent = [t for t in _user_timestamps.get(user_id, []) if now - t < window]
 
-    # Fix: remove empty keys to prevent unbounded memory growth
-    if not _user_timestamps[user_id]:
+    if recent:
+        _user_timestamps[user_id] = recent
+    else:
+        # Remove the key entirely to keep memory clean
         _user_timestamps.pop(user_id, None)
-        if limit <= 0:
-            return True
 
-    if len(_user_timestamps.get(user_id, [])) >= limit:
+    if len(recent) >= limit:
         return False
 
+    # Within limit — record this request
     _user_timestamps.setdefault(user_id, []).append(now)
     return True
+
 
 
 # ── Pending confirmations (in-memory) with TTL ───────────────
