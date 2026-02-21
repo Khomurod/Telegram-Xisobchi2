@@ -28,6 +28,7 @@ class Onboarding(StatesGroup):
     waiting_name = State()
     waiting_contact = State()
     walkthrough_step = State()
+    demo_mode = State()  # Test message — parsed but NOT saved
 
 
 # ── Main keyboard (imported by commands.py too) ──────────────
@@ -328,17 +329,113 @@ async def walkthrough_finish(message: Message, state: FSMContext):
 
 
 async def _finish_onboarding(message: Message, state: FSMContext):
-    """Complete onboarding and show the main keyboard."""
-    await state.clear()
+    """Show demo invite after walkthrough is done."""
+    name = message.from_user.first_name or "do'stim"
+    await state.set_state(Onboarding.demo_mode)
 
+    await message.answer(
+        f"🎉 *Ajoyib, {name}! Siz tayyor!*\n\n"
+        "🧪 *Sinab ko'ramizmi?*\n\n"
+        "Menga bitta ovozli yoki matnli xabar yuboring — "
+        "masalan, bugun qilgan xarajatingizni ayting.\n\n"
+        "⚠️ *Bu faqat sinov — hech narsa saqlanmaydi!*\n"
+        "Natijani ko'rsataman, keyin asosiy rejimga o'tamiz. 👇",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    logger.info(f"User {message.from_user.id} entered demo mode")
+
+
+async def _show_main_keyboard(message: Message, state: FSMContext):
+    """Clear FSM and show main keyboard — onboarding complete."""
+    await state.clear()
     name = message.from_user.first_name or "do'stim"
     await message.answer(
-        f"🎉 *Tayyor, {name}!*\n\n"
-        "Endi ovozli yoki matnli xabar yuboring — "
-        "men avtomatik ravishda kirim yoki chiqimingizni qayd etaman.\n\n"
-        '📌 Masalan: _"Taksiga 15,000 so\'m xarajat qildim"_\n\n'
-        "Yoki pastdagi tugmalardan foydalaning! 👇",
+        f"🚀 *Zo'r, {name}! Endi asosiy rejimga o'tamiz.*\n\n"
+        "Endi istalgan vaqt ovozli yoki matnli xabar yuboring — "
+        "men hisobga olaman. 📊",
         parse_mode="Markdown",
         reply_markup=MAIN_KEYBOARD,
     )
-    logger.info(f"User {message.from_user.id} completed onboarding")
+    logger.info(f"User {message.from_user.id} completed full onboarding")
+
+
+# ── Demo mode: parse but do NOT save ─────────────────────────────
+
+@router.message(Onboarding.demo_mode, F.text)
+async def demo_text(message: Message, state: FSMContext):
+    """Parse user text in demo mode — show result but don't save."""
+    from app.services.parser import parse_transaction, _normalize_text
+    raw = message.text.strip()
+    parsed = parse_transaction(_normalize_text(raw))
+    await _show_demo_result(message, state, parsed, raw)
+
+
+@router.message(Onboarding.demo_mode, F.voice)
+async def demo_voice(message: Message, state: FSMContext):
+    """Transcribe and parse voice in demo mode — show result but don't save."""
+    from aiogram import Bot
+    from app.services.speech_service import transcribe_audio
+    from app.services.parser import parse_transaction, _normalize_text
+    import tempfile, os
+
+    await message.answer("⏳ Ovozingizni tahlil qilyapman...⁠🔊")
+
+    bot: Bot = message.bot
+    file = await bot.get_file(message.voice.file_id)
+    suffix = ".ogg"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        await bot.download_file(file.file_path, destination=tmp_path)
+        transcript = await transcribe_audio(tmp_path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    if not transcript:
+        await message.answer(
+            "⚠️ Ovozni tushunmadim. Iltimos, matn yuboring yoki qayta urinib ko'ring."
+        )
+        return
+
+    await message.answer(f"📝 *Eshitildi:* _{transcript}_", parse_mode="Markdown")
+    parsed = parse_transaction(_normalize_text(transcript))
+    await _show_demo_result(message, state, parsed, transcript)
+
+
+async def _show_demo_result(message: Message, state: FSMContext, parsed, raw: str):
+    """Show what the bot understood from the demo message, then switch to main keyboard."""
+    from app.utils.formatting import format_amount
+    from app.constants import CATEGORY_EMOJI
+
+    if not parsed or not parsed.get("amount"):
+        await message.answer(
+            "🤔 *Tushunmadim...*\n\n"
+            f"_\"{raw}\"_ dan ma'lumot ajrata olmadim.\n"
+            "Haqiqiy rejimda yozayotganda aniqroq yozing, masalan:\n"
+            '📌 _"Ovqatga 50 ming so\'m sarfladim"_',
+            parse_mode="Markdown",
+        )
+    else:
+        type_uz = "Kirim 📈" if parsed["type"] == "income" else "Chiqim 📉"
+        cat = parsed.get("category", "boshqa")
+        cat_emoji = CATEGORY_EMOJI.get(cat, "📦")
+        amount_str = format_amount(parsed["amount"], parsed.get("currency", "UZS"))
+        desc = parsed.get("description", raw)
+
+        await message.answer(
+            "🧪 *Bot nima tushundi? (SINOV)*\n\n"
+            f"✨ Tur: *{type_uz}*\n"
+            f"💵 Summa: *{amount_str}*\n"
+            f"{cat_emoji} Kategoriya: *{cat}*\n"
+            f"💬 Tavsif: _{desc}_\n\n"
+            "⚠️ *Bu faqat sinov edi — hech narsa saqlanmadi!*\n"
+            "Haqiqiy rejimda xuddi shunday ishlaydi. 👇",
+            parse_mode="Markdown",
+        )
+
+    await asyncio.sleep(1)
+    await _show_main_keyboard(message, state)
+
