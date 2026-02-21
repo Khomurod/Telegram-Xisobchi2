@@ -21,10 +21,11 @@ router = Router()
 TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-
 # ── Rate limiter (in-memory) ─────────────────────────────────
 
 _user_timestamps: dict[int, list[float]] = defaultdict(list)
+
+_PENDING_TTL = 300.0  # 5 minutes — confirmations older than this are discarded
 
 
 def _check_rate_limit(user_id: int) -> bool:
@@ -37,19 +38,31 @@ def _check_rate_limit(user_id: int) -> bool:
     timestamps = _user_timestamps[user_id]
     _user_timestamps[user_id] = [t for t in timestamps if now - t < window]
 
-    if len(_user_timestamps[user_id]) >= limit:
+    # Fix: remove empty keys to prevent unbounded memory growth
+    if not _user_timestamps[user_id]:
+        _user_timestamps.pop(user_id, None)
+        if limit <= 0:
+            return True
+
+    if len(_user_timestamps.get(user_id, [])) >= limit:
         return False
 
-    _user_timestamps[user_id].append(now)
+    _user_timestamps.setdefault(user_id, []).append(now)
     return True
 
 
-# ── Pending confirmations (in-memory) ────────────────────────
+# ── Pending confirmations (in-memory) with TTL ───────────────
 
 _pending_confirmations: dict[str, dict] = {}
 
 
-
+def _cleanup_stale_pending() -> None:
+    """Remove pending confirmations older than TTL to prevent memory leaks."""
+    now = time.time()
+    stale = [k for k, v in _pending_confirmations.items() if now - v.get("created_at", 0) > _PENDING_TTL]
+    for k in stale:
+        logger.debug(f"Discarding stale pending confirmation: {k}")
+        _pending_confirmations.pop(k, None)
 
 
 # ── Voice message handler ────────────────────────────────────
@@ -60,6 +73,9 @@ async def handle_voice(message: types.Message, bot: Bot):
     user_id = message.from_user.id
     duration = message.voice.duration
     logger.info(f"Voice message from user {user_id}, duration: {duration}s")
+
+    # Clean up stale confirmations on every incoming voice message
+    _cleanup_stale_pending()
 
     # Guard 1: Duration limit
     if duration > settings.MAX_VOICE_DURATION:
@@ -116,7 +132,8 @@ async def handle_voice(message: types.Message, bot: Bot):
         cat_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
         amount_str = format_amount(parsed.amount, parsed.currency)
 
-        # Store pending confirmation
+        # Store pending confirmation — include the parsed result so confirm
+        # handler can use it directly without re-parsing (Fix: double-parsing bug)
         confirm_key = f"{user_id}_{message.message_id}"
         _pending_confirmations[confirm_key] = {
             "telegram_id": user_id,
@@ -125,6 +142,7 @@ async def handle_voice(message: types.Message, bot: Bot):
             "text": result.text,
             "parsed": parsed,
             "confidence": result.confidence,
+            "created_at": time.time(),  # TTL timestamp
         }
 
         # Add confidence warning if transcription quality is low
@@ -171,7 +189,7 @@ async def handle_voice(message: types.Message, bot: Bot):
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def handle_confirm(callback: CallbackQuery):
-    """Save transaction after user confirms."""
+    """Save transaction after user confirms — uses pre-parsed result (no re-parsing)."""
     confirm_key = callback.data.replace("confirm_", "")
     pending = _pending_confirmations.pop(confirm_key, None)
 
@@ -180,15 +198,16 @@ async def handle_confirm(callback: CallbackQuery):
         return
 
     try:
-        parsed = pending["parsed"]
         async with async_session() as session:
             user_repo = UserRepository(session)
             txn_repo = TransactionRepository(session)
             service = TransactionService(user_repo, txn_repo)
 
-            result = await service.process_text(
+            # Use save_parsed() — the parsed result is what the user already approved,
+            # so we store exactly that rather than re-parsing the raw text.
+            result = await service.save_parsed(
                 telegram_id=pending["telegram_id"],
-                text=pending["text"],
+                parsed=pending["parsed"],
                 first_name=pending["first_name"],
                 username=pending["username"],
             )

@@ -2,6 +2,7 @@
 Text message handler — allows users to type transactions instead of using voice.
 Example: "ovqatga 50 ming" or "maosh oldim 5 million"
 """
+import time
 from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from app.database.connection import async_session
@@ -19,12 +20,26 @@ router = Router()
 # Shared pending confirmations for text input
 _text_pending: dict[str, dict] = {}
 
+_PENDING_TTL = 300.0  # 5 minutes — entries older than this are discarded
+
+
+def _cleanup_stale_pending() -> None:
+    """Remove stale text pending confirmations to prevent memory leaks."""
+    now = time.time()
+    stale = [k for k, v in _text_pending.items() if now - v.get("created_at", 0) > _PENDING_TTL]
+    for k in stale:
+        logger.debug(f"Discarding stale text pending: {k}")
+        _text_pending.pop(k, None)
+
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: types.Message):
     """Parse typed text as a financial transaction."""
     text = message.text.strip()
     user_id = message.from_user.id
+
+    # Clean up stale confirmations on each message
+    _cleanup_stale_pending()
 
     # Skip very short messages
     if len(text) < 3:
@@ -35,7 +50,6 @@ async def handle_text(message: types.Message):
 
     if not parsed:
         # Not a transaction — silently ignore to avoid annoying the user
-        # They might just be chatting or sending random text
         return
 
     # Build confirmation
@@ -45,7 +59,7 @@ async def handle_text(message: types.Message):
     cat_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
     amount_str = format_amount(parsed.amount, parsed.currency)
 
-    # Store pending confirmation
+    # Store pending confirmation — include parsed result to avoid re-parsing on confirm
     confirm_key = f"txt_{user_id}_{message.message_id}"
     _text_pending[confirm_key] = {
         "telegram_id": user_id,
@@ -53,6 +67,7 @@ async def handle_text(message: types.Message):
         "username": message.from_user.username,
         "text": text,
         "parsed": parsed,
+        "created_at": time.time(),  # TTL timestamp
     }
 
     confirm_text = (
@@ -76,7 +91,7 @@ async def handle_text(message: types.Message):
 
 @router.callback_query(F.data.startswith("txtconf_"))
 async def handle_text_confirm(callback: CallbackQuery):
-    """Save text-based transaction after confirmation."""
+    """Save text-based transaction after confirmation — uses pre-parsed result."""
     confirm_key = callback.data.replace("txtconf_", "")
     pending = _text_pending.pop(confirm_key, None)
 
@@ -90,9 +105,11 @@ async def handle_text_confirm(callback: CallbackQuery):
             txn_repo = TransactionRepository(session)
             service = TransactionService(user_repo, txn_repo)
 
-            result = await service.process_text(
+            # Use save_parsed() — the parsed result is what the user already approved,
+            # so we store exactly that rather than re-parsing the raw text.
+            result = await service.save_parsed(
                 telegram_id=pending["telegram_id"],
-                text=pending["text"],
+                parsed=pending["parsed"],
                 first_name=pending["first_name"],
                 username=pending["username"],
             )

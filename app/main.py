@@ -66,6 +66,10 @@ async def health():
 
 @app.post(settings.WEBHOOK_PATH)
 async def webhook(request: Request):
+    # NOTE (Intentional - Finding #2):
+    # Telegram webhook secret-token validation (X-Telegram-Bot-Api-Secret-Token header)
+    # is intentionally deferred. To harden this endpoint later, pass secret_token=
+    # to bot.set_webhook() and validate the header here before processing updates.
     """Receive Telegram updates via webhook."""
     try:
         data = await request.json()

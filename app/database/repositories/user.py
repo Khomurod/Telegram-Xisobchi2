@@ -27,4 +27,17 @@ class UserRepository(BaseRepository):
         user = await self.get_by_telegram_id(telegram_id)
         if not user:
             user = await self.create(telegram_id, first_name, username)
+        else:
+            # Update profile fields if they've changed since last seen
+            changed = False
+            if first_name and user.first_name != first_name:
+                user.first_name = first_name
+                changed = True
+            if username != user.username:  # username can become None (user removed it)
+                user.username = username
+                changed = True
+            if changed:
+                await self.session.commit()
+                await self.session.refresh(user)
         return user
+

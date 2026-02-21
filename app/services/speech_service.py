@@ -46,12 +46,15 @@ def _get_client() -> speech.SpeechClient:
         # Mode 1: credentials JSON in env var (for Railway, render, etc.)
         creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
         if creds_json:
-            import tempfile, json
-            # Validate it's proper JSON
+            import tempfile, json, atexit
+            # Validate it's proper JSON before writing
             json.loads(creds_json)
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
                 f.write(creds_json)
+                _tmp_creds_path = f.name
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = f.name
+            # Register cleanup so the private key doesn't linger on disk (Finding #3 fix)
+            atexit.register(lambda p=_tmp_creds_path: os.path.exists(p) and os.remove(p))
             logger.info("Google credentials loaded from GOOGLE_CREDENTIALS_JSON env var")
         else:
             # Mode 2: file path (local dev)

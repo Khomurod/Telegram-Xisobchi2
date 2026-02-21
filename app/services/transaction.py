@@ -23,17 +23,39 @@ class TransactionService:
         """
         Parse text and create transaction.
         Returns dict with 'success', 'transaction' or 'error'.
+
+        NOTE: Prefer save_parsed() when you already have a ParsedTransaction
+        (e.g. from a confirmation flow) to avoid re-parsing and potential
+        discrepancies between what the user saw and what gets saved.
         """
-        # Ensure user exists
         user = await self.user_repo.get_or_create(telegram_id, first_name, username)
 
-        # Parse text
         parsed = parse_transaction(text)
         if not parsed:
             logger.warning(f"Parse failed for user {telegram_id}: '{text}'")
             return {"success": False, "error": "parse_failed"}
 
-        # Store transaction
+        return await self._store(user, parsed, telegram_id)
+
+    async def save_parsed(
+        self,
+        telegram_id: int,
+        parsed: ParsedTransaction,
+        first_name: str = None,
+        username: str = None,
+    ) -> dict:
+        """
+        Save an already-parsed transaction — no re-parsing.
+
+        Use this in confirmation flows to guarantee the saved data matches
+        exactly what was shown to the user at confirmation time.
+        Returns dict with 'success', 'transaction' or 'error'.
+        """
+        user = await self.user_repo.get_or_create(telegram_id, first_name, username)
+        return await self._store(user, parsed, telegram_id)
+
+    async def _store(self, user, parsed: ParsedTransaction, telegram_id: int) -> dict:
+        """Internal helper: persist a ParsedTransaction to the database."""
         txn = await self.txn_repo.create(
             user_id=user.id,
             type=parsed.type,
@@ -43,7 +65,10 @@ class TransactionService:
             description=parsed.description,
         )
 
-        logger.info(f"Transaction #{txn.id} saved: {parsed.type} {parsed.amount} {parsed.currency} [{parsed.category}] for user {telegram_id}")
+        logger.info(
+            f"Transaction #{txn.id} saved: {parsed.type} {parsed.amount} "
+            f"{parsed.currency} [{parsed.category}] for user {telegram_id}"
+        )
 
         return {
             "success": True,

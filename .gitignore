@@ -8,3 +8,5 @@ temp/
 .vscode/
 .idea/
 credentials.json
+# Alembic compiled files
+migrations/versions/__pycache__/

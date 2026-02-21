@@ -1,6 +1,6 @@
 from datetime import datetime
 from app.database.repositories.transaction import TransactionRepository
-from app.constants import UZT, CATEGORY_DISPLAY
+from app.constants import UZT, CATEGORY_DISPLAY, uzbek_month_year
 from app.utils.formatting import format_amount
 from app.utils.logger import setup_logger
 
@@ -81,12 +81,11 @@ class ReportService:
         """Current month grouped by category."""
         rows = await self.txn_repo.get_month_by_category(user_id)
         now = datetime.now(UZT)
-        month_str = now.strftime("%B %Y")
 
         if not rows:
-            return f"📅 *Oylik hisobot* ({month_str})\n\nBu oyda hech qanday operatsiya yo'q."
+            return f"📅 *Oylik hisobot* ({uzbek_month_year(now)})\n\nBu oyda hech qanday operatsiya yo'q."
 
-        lines = [f"📅 *Oylik hisobot* ({month_str})\n"]
+        lines = [f"📅 *Oylik hisobot* ({uzbek_month_year(now)})\n"]
 
         # Group by type
         income_cats = {}
