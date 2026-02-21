@@ -28,16 +28,8 @@ async def cmd_help(message: types.Message):
         "💬 *Matn* yozib ham qo'shishingiz mumkin:\n"
         '  _"transport 20 ming"_\n'
         '  _"kirim 3 million maosh"_\n\n'
-        "📝 *Buyruqlar:*\n"
-        "/balans — 💰 Umumiy balans\n"
-        "/bugun — 📊 Bugungi operatsiyalar\n"
-        "/hafta — 📅 Oxirgi 7 kunlik hisobot\n"
-        "/oy — 📅 Oylik hisobot\n"
-        "/hisobot — 📋 To'liq hisobot\n"
-        "/tarix — ✏️ Oxirgi operatsiyalarni ko'rish, tahrirlash yoki o'chirish\n"
-        "/bekor — ↩️ Oxirgi operatsiyani bekor qilish\n"
-        "/export — 📤 CSV fayl sifatida eksport\n"
-        "/yordam — 📖 Shu yordam sahifasi\n\n"
+        "⌨️ Pastdagi *tugmalar* orqali balans, hisobot, "
+        "eksport va boshqa funksiyalardan foydalaning.\n\n"
         "📂 *Kategoriyalar:*\n"
         "🍽 Oziq-ovqat | 🚕 Transport | 🏠 Uy-joy\n"
         "💊 Sog'liq | 👔 Kiyim | 📱 Aloqa\n"
