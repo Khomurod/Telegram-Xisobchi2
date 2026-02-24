@@ -52,7 +52,23 @@ async def lifespan(app: FastAPI):
         drop_pending_updates=True,
     )
     logger.info(f"Webhook set successfully: {webhook_url}")
+
+    # Start cross-ping keep-alive (pings Koyeb to keep it awake)
+    ping_task = None
+    if settings.PING_TARGET_URL:
+        from app.pinger import ping_loop
+        ping_task = asyncio.create_task(ping_loop())
+        logger.info(f"Cross-ping started → {settings.PING_TARGET_URL}")
+
     yield
+
+    # Shutdown
+    if ping_task:
+        ping_task.cancel()
+        try:
+            await ping_task
+        except asyncio.CancelledError:
+            pass
     # Don't delete webhook on shutdown — Railway redeploys cause a race
     # condition where the old container deletes it after the new one sets it.
     await bot.session.close()

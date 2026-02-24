@@ -11,10 +11,14 @@ class Settings:
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
     WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")
     WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook")
-    MODE: str = os.getenv("MODE", "polling")  # "polling" or "webhook"
+    MODE: str = os.getenv("MODE", "polling")  # "polling", "webhook", or "pinger"
+
+    # Cross-ping keep-alive (Render ↔ Koyeb)
+    PING_TARGET_URL: str = os.getenv("PING_TARGET_URL", "")
+    PING_INTERVAL_SECONDS: int = int(os.getenv("PING_INTERVAL_SECONDS", "840"))  # 14 min
 
     # Database
-    # Railway provides DATABASE_URL as postgresql://...
+    # Koyeb/Railway provide DATABASE_URL as postgresql://...
     # SQLAlchemy async needs postgresql+asyncpg://...
     # This auto-conversion makes it work without manual env var editing.
     @property
@@ -40,7 +44,7 @@ class Settings:
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    # Admin panel — set ADMIN_SECRET in Render env vars
+    # Admin panel — set ADMIN_SECRET in Koyeb env vars
     ADMIN_SECRET: str = os.getenv("ADMIN_SECRET", "")
 
     @property
