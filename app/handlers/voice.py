@@ -7,7 +7,7 @@ from aiogram.enums import ButtonStyle
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
-from app.services.speech_service import transcribe_audio, clean_transcript
+from app.services.speech_service import transcribe_audio
 from app.services.parser import parse_transaction
 from app.services.transaction import TransactionService
 from app.config import settings
@@ -160,14 +160,11 @@ async def handle_voice(message: types.Message, bot: Bot):
         if result.confidence < 0.6:
             conf_warning = "\n⚠️ _Ovoz sifati past. Iltimos, tekshiring._\n"
 
-        # Clean up transcript for display (GPT-4o-mini)
-        display_text = await clean_transcript(result.text)
-
         confirm_text = (
             f"{emoji} *{type_uz}*\n"
             f"💵 {amount_str}\n"
             f"{cat_emoji} {cat_name}\n\n"
-            f"📝 _{display_text}_\n"
+            f"📝 _{result.text}_\n"
             f"{conf_warning}\n"
             f"Shu ma'lumot to'g'rimi?"
         )
