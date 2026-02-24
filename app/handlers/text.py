@@ -5,6 +5,7 @@ Example: "ovqatga 50 ming" or "maosh oldim 5 million"
 import time
 from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.enums import ButtonStyle
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
@@ -80,8 +81,8 @@ async def handle_text(message: types.Message):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Ha, saqlash", callback_data=f"txtconf_{confirm_key}"),
-            InlineKeyboardButton(text="❌ Yo'q", callback_data=f"txtcan_{confirm_key}"),
+            InlineKeyboardButton(text="✅ Ha, saqlash", callback_data=f"txtconf_{confirm_key}", style=ButtonStyle.SUCCESS),
+            InlineKeyboardButton(text="❌ Yo'q", callback_data=f"txtcan_{confirm_key}", style=ButtonStyle.DANGER),
         ]
     ])
 

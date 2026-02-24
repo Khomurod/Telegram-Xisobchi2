@@ -36,10 +36,10 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
         [
             KeyboardButton(text="💰 Balans", style=ButtonStyle.PRIMARY),
-            KeyboardButton(text="📊 Hisobot", style=ButtonStyle.PRIMARY),
+            KeyboardButton(text="📊 Hisobot", style=ButtonStyle.SUCCESS),
         ],
         [
-            KeyboardButton(text="📅 Bugun", style=ButtonStyle.SUCCESS),
+            KeyboardButton(text="📅 Bugun", style=ButtonStyle.PRIMARY),
             KeyboardButton(text="📅 Hafta", style=ButtonStyle.SUCCESS),
         ],
         [
@@ -48,7 +48,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ],
         [
             KeyboardButton(text="❓ Yordam"),
-            KeyboardButton(text="🤝 Tavsiya", style=ButtonStyle.SUCCESS),
+            KeyboardButton(text="🤝 Tavsiya"),
         ],
     ],
     resize_keyboard=True,

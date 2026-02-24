@@ -3,6 +3,7 @@ import time
 from collections import defaultdict
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.enums import ButtonStyle
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
@@ -170,8 +171,8 @@ async def handle_voice(message: types.Message, bot: Bot):
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Ha, saqlash", callback_data=f"confirm_{confirm_key}"),
-                InlineKeyboardButton(text="❌ Yo'q", callback_data=f"cancel_{confirm_key}"),
+                InlineKeyboardButton(text="✅ Ha, saqlash", callback_data=f"confirm_{confirm_key}", style=ButtonStyle.SUCCESS),
+                InlineKeyboardButton(text="❌ Yo'q", callback_data=f"cancel_{confirm_key}", style=ButtonStyle.DANGER),
             ]
         ])
 
