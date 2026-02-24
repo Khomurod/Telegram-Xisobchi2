@@ -82,10 +82,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Xisobchi Bot", lifespan=lifespan)
 
-# CORS: restrict to dashboard origin (set DASHBOARD_ORIGIN env var for custom domain)
+# CORS: restrict to dashboard origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("DASHBOARD_ORIGIN", "https://truckerapp-system.web.app")],
+    allow_origins=[
+        os.getenv("DASHBOARD_ORIGIN", "https://truckerapp-system.web.app"),
+        "https://xisobchi-dashboard.web.app",
+        "https://xisobchi-dashboard.firebaseapp.com",
+    ],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
