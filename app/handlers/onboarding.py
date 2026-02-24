@@ -392,20 +392,20 @@ async def demo_voice(message: Message, state: FSMContext):
 
     try:
         await bot.download_file(file.file_path, destination=tmp_path)
-        transcript = await transcribe_audio(tmp_path)
+        result = await transcribe_audio(tmp_path)
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-    if not transcript:
+    if not result.text:
         await message.answer(
             "⚠️ Ovozni tushunmadim. Iltimos, matn yuboring yoki qayta urinib ko'ring."
         )
         return
 
-    await message.answer(f"📝 *Eshitildi:* _{transcript}_", parse_mode="Markdown")
-    parsed = parse_transaction(transcript)
-    await _show_demo_result(message, state, parsed, transcript)
+    await message.answer(f"📝 *Eshitildi:* _{result.text}_", parse_mode="Markdown")
+    parsed = parse_transaction(result.text)
+    await _show_demo_result(message, state, parsed, result.text)
 
 
 async def _show_demo_result(message: Message, state: FSMContext, parsed, raw: str):
@@ -413,7 +413,7 @@ async def _show_demo_result(message: Message, state: FSMContext, parsed, raw: st
     from app.utils.formatting import format_amount
     from app.constants import CATEGORY_EMOJI
 
-    if not parsed or not parsed.get("amount"):
+    if not parsed or not parsed.amount:
         await message.answer(
             "🤔 *Tushunmadim...*\n\n"
             f"_\"{raw}\"_ dan ma'lumot ajrata olmadim.\n"
@@ -422,11 +422,11 @@ async def _show_demo_result(message: Message, state: FSMContext, parsed, raw: st
             parse_mode="Markdown",
         )
     else:
-        type_uz = "Kirim 📈" if parsed["type"] == "income" else "Chiqim 📉"
-        cat = parsed.get("category", "boshqa")
+        type_uz = "Kirim 📈" if parsed.type == "income" else "Chiqim 📉"
+        cat = parsed.category or "boshqa"
         cat_emoji = CATEGORY_EMOJI.get(cat, "📦")
-        amount_str = format_amount(parsed["amount"], parsed.get("currency", "UZS"))
-        desc = parsed.get("description", raw)
+        amount_str = format_amount(parsed.amount, parsed.currency or "UZS")
+        desc = parsed.description or raw
 
         await message.answer(
             "🧪 *Bot nima tushundi? (SINOV)*\n\n"
