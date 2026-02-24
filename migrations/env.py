@@ -7,6 +7,7 @@ Reads DATABASE_URL from environment — supports both SQLite (dev) and PostgreSQ
 import os
 import sys
 import asyncio
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -46,6 +47,14 @@ if database_url and database_url.startswith("postgres://"):
 elif database_url and database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+# asyncpg doesn't accept sslmode — strip it from URL
+if database_url and "postgresql" in database_url:
+    parsed = urlparse(database_url)
+    params = parse_qs(parsed.query)
+    params.pop("sslmode", None)
+    clean_query = urlencode(params, doseq=True)
+    database_url = urlunparse(parsed._replace(query=clean_query))
+
 # Alembic's async engine does not support aiosqlite/asyncpg drivers directly
 # via the config file — we set it programmatically here.
 config.set_main_option("sqlalchemy.url", database_url)
@@ -81,10 +90,17 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations in online mode."""
+    # PostgreSQL (Neon pooler) needs ssl and no prepared statements
+    connect_args = {}
+    db = config.get_main_option("sqlalchemy.url") or ""
+    if "postgresql" in db:
+        connect_args = {"ssl": "require", "statement_cache_size": 0}
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

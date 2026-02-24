@@ -1,12 +1,16 @@
+# Core
 aiogram==3.25.0
 fastapi==0.129.0
 uvicorn==0.41.0
+# Database
 sqlalchemy==2.0.46
-aiosqlite==0.22.1
+aiosqlite==0.22.1    # Local dev only (SQLite); production uses asyncpg (PostgreSQL)
 asyncpg==0.30.0
 alembic==1.14.1
+# Utilities
 python-dotenv==1.2.1
 aiofiles==25.1.0
 aiohttp==3.13.3
+# Speech-to-Text
 google-cloud-speech==2.28.0
 static-ffmpeg==3.0

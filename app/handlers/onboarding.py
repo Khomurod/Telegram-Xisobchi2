@@ -368,9 +368,9 @@ async def _show_main_keyboard(message: Message, state: FSMContext):
 @router.message(Onboarding.demo_mode, F.text)
 async def demo_text(message: Message, state: FSMContext):
     """Parse user text in demo mode — show result but don't save."""
-    from app.services.parser import parse_transaction, _normalize_text
+    from app.services.parser import parse_transaction
     raw = message.text.strip()
-    parsed = parse_transaction(_normalize_text(raw))
+    parsed = parse_transaction(raw)
     await _show_demo_result(message, state, parsed, raw)
 
 
@@ -379,7 +379,7 @@ async def demo_voice(message: Message, state: FSMContext):
     """Transcribe and parse voice in demo mode — show result but don't save."""
     from aiogram import Bot
     from app.services.speech_service import transcribe_audio
-    from app.services.parser import parse_transaction, _normalize_text
+    from app.services.parser import parse_transaction
     import tempfile, os
 
     await message.answer("⏳ Ovozingizni tahlil qilyapman...⁠🔊")
@@ -404,7 +404,7 @@ async def demo_voice(message: Message, state: FSMContext):
         return
 
     await message.answer(f"📝 *Eshitildi:* _{transcript}_", parse_mode="Markdown")
-    parsed = parse_transaction(_normalize_text(transcript))
+    parsed = parse_transaction(transcript)
     await _show_demo_result(message, state, parsed, transcript)
 
 

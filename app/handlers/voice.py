@@ -103,10 +103,18 @@ async def handle_voice(message: types.Message, bot: Bot):
         file = await bot.get_file(message.voice.file_id)
         local_path = os.path.join(TEMP_DIR, f"{message.voice.file_id}.ogg")
         await bot.download_file(file.file_path, destination=local_path)
-        logger.info(f"Downloaded voice to: {local_path}")
 
-        # Step 3: Transcribe with Google Cloud STT
-        result = await transcribe_audio(local_path)
+        try:
+            logger.info(f"Downloaded voice to: {local_path}")
+            # Step 3: Transcribe with Google Cloud STT
+            result = await transcribe_audio(local_path)
+        finally:
+            # Ensure OGG cleanup even if transcribe_audio doesn't reach its own finally
+            if os.path.exists(local_path):
+                try:
+                    os.remove(local_path)
+                except OSError:
+                    pass
 
         if not result.text:
             await processing_msg.edit_text(

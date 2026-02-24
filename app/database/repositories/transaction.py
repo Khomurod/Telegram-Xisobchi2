@@ -127,3 +127,11 @@ class TransactionRepository(BaseRepository):
         result = await self.session.execute(query)
         return result.all()
 
+    async def count_this_month(self, user_id: int) -> int:
+        """Count transactions this month (cheaper than loading all rows)."""
+        month_start = datetime.now(UZT).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        result = await self.session.execute(
+            select(func.count()).select_from(Transaction)
+            .where(Transaction.user_id == user_id, Transaction.created_at >= month_start)
+        )
+        return result.scalar() or 0

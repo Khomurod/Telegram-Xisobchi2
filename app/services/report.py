@@ -150,8 +150,7 @@ class ReportService:
         balance = await self.get_balance(user_id)
         month = await self.get_month_report(user_id)
 
-        transactions = await self.txn_repo.get_this_month(user_id)
-        txn_count = len(transactions)
+        txn_count = await self.txn_repo.count_this_month(user_id)
 
         lines = [
             "📋 *To'liq hisobot*\n",

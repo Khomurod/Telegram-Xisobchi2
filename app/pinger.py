@@ -23,14 +23,14 @@ async def ping_loop():
         return
 
     logger.info(f"Pinger started: hitting {url} every {interval}s")
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     logger.info(f"Ping {url} → {resp.status}")
-        except Exception as e:
-            logger.warning(f"Ping failed: {e}")
-        await asyncio.sleep(interval)
+            except Exception as e:
+                logger.warning(f"Ping failed: {e}")
+            await asyncio.sleep(interval)
 
 
 @asynccontextmanager

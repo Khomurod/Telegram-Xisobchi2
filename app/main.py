@@ -1,6 +1,7 @@
 import asyncio
 import os
 import glob
+import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,9 @@ from app.database.models import User, Transaction
 from app.utils.logger import setup_logger
 
 logger = setup_logger("main")
+
+# Webhook secret token — prevents fake Telegram updates
+_webhook_secret = os.getenv("WEBHOOK_SECRET", secrets.token_hex(32))
 
 # Temp directory for voice file processing
 TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp")
@@ -50,6 +54,7 @@ async def lifespan(app: FastAPI):
         url=webhook_url,
         allowed_updates=["message", "callback_query"],
         drop_pending_updates=True,
+        secret_token=_webhook_secret,
     )
     logger.info(f"Webhook set successfully: {webhook_url}")
 
@@ -77,13 +82,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Xisobchi Bot", lifespan=lifespan)
 
-# Allow dashboard (any origin) to call /stats and /admin/*
+# CORS: restrict to dashboard origin (set DASHBOARD_ORIGIN env var for custom domain)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[os.getenv("DASHBOARD_ORIGIN", "https://truckerapp-system.web.app")],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 
@@ -95,8 +99,9 @@ async def health():
 
 @app.get("/stats")
 async def stats():
-    """Public stats endpoint for the GitHub Pages dashboard.
-    Returns only aggregate counts — no personal user data.
+    """Public stats endpoint — intentionally unauthenticated.
+    Used by the public dashboard. Returns only aggregate counts, no PII.
+    To restrict access, add _check_admin(request) guard.
     """
     try:
         async with async_session() as session:
@@ -203,6 +208,7 @@ async def admin_broadcast(request: Request):
             try:
                 await bot.send_message(chat_id=tg_id, text=text, parse_mode="HTML")
                 sent += 1
+                await asyncio.sleep(0.05)  # Throttle: stay under Telegram 30 msg/s limit
             except Exception:
                 failed += 1
 
@@ -239,11 +245,10 @@ async def admin_daily_stats(request: Request):
 
 @app.post(settings.WEBHOOK_PATH)
 async def webhook(request: Request):
-    # NOTE (Intentional - Finding #2):
-    # Telegram webhook secret-token validation (X-Telegram-Bot-Api-Secret-Token header)
-    # is intentionally deferred. To harden this endpoint later, pass secret_token=
-    # to bot.set_webhook() and validate the header here before processing updates.
     """Receive Telegram updates via webhook."""
+    # Validate Telegram's secret token header
+    if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != _webhook_secret:
+        return JSONResponse({"error": "unauthorized"}, status_code=403)
     try:
         data = await request.json()
         update = Update.model_validate(data, context={"bot": bot})

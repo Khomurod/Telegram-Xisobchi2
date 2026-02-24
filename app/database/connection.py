@@ -2,11 +2,22 @@ import os
 import subprocess
 import sys
 import sqlite3
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.config import settings
 from app.utils.logger import setup_logger
 
 logger = setup_logger("database")
+
+
+def _strip_sslmode(url: str) -> str:
+    """Remove sslmode query param — asyncpg uses connect_args ssl instead."""
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    params.pop("sslmode", None)
+    clean_query = urlencode(params, doseq=True)
+    return urlunparse(parsed._replace(query=clean_query))
+
 
 # Ensure data directory exists for SQLite
 db_url = settings.DATABASE_URL
@@ -16,10 +27,12 @@ if "sqlite" in db_url:
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
 
-# PostgreSQL (Supabase pooler) needs:
+# PostgreSQL (Neon/Supabase pooler) needs:
 #   ssl='require'            — pooler enforces TLS
 #   statement_cache_size=0   — PgBouncer doesn't support prepared statements
+#   sslmode stripped         — asyncpg doesn't accept sslmode URL param
 if "postgresql" in db_url or "postgres" in db_url:
+    db_url = _strip_sslmode(db_url)
     engine = create_async_engine(
         db_url,
         echo=False,
