@@ -7,7 +7,7 @@ Reads DATABASE_URL from environment — supports both SQLite (dev) and PostgreSQ
 import os
 import sys
 import asyncio
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from urllib.parse import urlparse, urlunparse
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -47,13 +47,11 @@ if database_url and database_url.startswith("postgres://"):
 elif database_url and database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# asyncpg doesn't accept sslmode — strip it from URL
+# asyncpg doesn't accept libpq query params (sslmode, channel_binding, etc.)
+# Strip them all — SSL is handled via connect_args instead.
 if database_url and "postgresql" in database_url:
     parsed = urlparse(database_url)
-    params = parse_qs(parsed.query)
-    params.pop("sslmode", None)
-    clean_query = urlencode(params, doseq=True)
-    database_url = urlunparse(parsed._replace(query=clean_query))
+    database_url = urlunparse(parsed._replace(query=""))
 
 # Alembic's async engine does not support aiosqlite/asyncpg drivers directly
 # via the config file — we set it programmatically here.
