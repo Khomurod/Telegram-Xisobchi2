@@ -61,8 +61,15 @@ def _transcribe_whisper_sync(file_path: str) -> TranscriptionResult:
         response = client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
+            language="uz",
             response_format="verbose_json",
-            prompt="Ovqatga 50 ming so'm sarfladim. Hot dog uchun 30 ming ishlatdim. Taksi 15 ming. Maosh 5 million so'm oldim.",
+            prompt=(
+                "33 minga hot dog oldim. Ovqatga 50 ming so'm sarfladim. "
+                "Pizza uchun 40 ming ishlatdim. Taksi 15 ming. "
+                "Maosh 5 million so'm oldim. Burger 25 mingga oldim. "
+                "Coca cola 8 ming. Transport 10 ming. "
+                "Dollar 100 oldim. Benzin 80 ming."
+            ),
         )
 
     elapsed = time.time() - start_time
