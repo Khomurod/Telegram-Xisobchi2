@@ -384,28 +384,46 @@ async def demo_voice(message: Message, state: FSMContext):
 
     await message.answer("⏳ Ovozingizni tahlil qilyapman...⁠🔊")
 
-    bot: Bot = message.bot
-    file = await bot.get_file(message.voice.file_id)
-    suffix = ".ogg"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp_path = tmp.name
-
     try:
-        await bot.download_file(file.file_path, destination=tmp_path)
-        result = await transcribe_audio(tmp_path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        bot: Bot = message.bot
+        file = await bot.get_file(message.voice.file_id)
+        suffix = ".ogg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_path = tmp.name
 
-    if not result.text:
+        try:
+            await bot.download_file(file.file_path, destination=tmp_path)
+            result = await transcribe_audio(tmp_path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+        if not result.text:
+            await message.answer(
+                "⚠️ Ovozni tushunmadim. Iltimos, matn yuboring yoki qayta urinib ko'ring."
+            )
+            return
+
+        await message.answer(f"📝 *Eshitildi:* _{result.text}_", parse_mode="Markdown")
+        parsed = parse_transaction(result.text)
+        await _show_demo_result(message, state, parsed, result.text)
+
+    except FileNotFoundError:
+        logger.error("Google credentials not found during demo voice")
         await message.answer(
-            "⚠️ Ovozni tushunmadim. Iltimos, matn yuboring yoki qayta urinib ko'ring."
+            "⚠️ Ovozli xabar xizmati hozircha ishlamayapti.\n"
+            "Iltimos, matn yuboring yoki sinov bosqichini o'tkazib yuboring."
         )
-        return
-
-    await message.answer(f"📝 *Eshitildi:* _{result.text}_", parse_mode="Markdown")
-    parsed = parse_transaction(result.text)
-    await _show_demo_result(message, state, parsed, result.text)
+        await asyncio.sleep(1)
+        await _show_main_keyboard(message, state)
+    except Exception as e:
+        logger.error(f"Demo voice error: {e}", exc_info=True)
+        await message.answer(
+            "⚠️ Ovozli xabarni qayta ishlashda xatolik yuz berdi.\n"
+            "Iltimos, matn yuboring yoki qayta urinib ko'ring."
+        )
+        await asyncio.sleep(1)
+        await _show_main_keyboard(message, state)
 
 
 async def _show_demo_result(message: Message, state: FSMContext, parsed, raw: str):
