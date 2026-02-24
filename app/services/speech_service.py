@@ -158,7 +158,8 @@ def _transcribe_sync(file_path: str) -> TranscriptionResult:
             language_code=settings.SPEECH_LANGUAGE,
             alternative_language_codes=settings.SPEECH_ALT_LANGUAGES,
             enable_automatic_punctuation=True,
-            model="latest_short",
+            model="command_and_search",
+            use_enhanced=True,
             speech_contexts=speech_contexts,
         )
 
