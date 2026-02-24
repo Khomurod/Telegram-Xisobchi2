@@ -91,6 +91,50 @@ def _transcribe_whisper_sync(file_path: str) -> TranscriptionResult:
     )
 
 
+# ── GPT transcript cleanup ──────────────────────────────────
+
+def _clean_transcript_sync(raw_text: str) -> str:
+    """Use GPT-4o-mini to clean up a raw Whisper transcript into natural Uzbek."""
+    client = _get_openai_client()
+    if not client or not raw_text.strip():
+        return raw_text
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Sen o'zbek tilida ovozli xabarlarni tozalash vositasishan. "
+                        "Foydalanuvchi ovozli xabar yubordi va Whisper uni transkripsiya qildi. "
+                        "Trankripsiyadagi xatolarni tuzat va tabiiy o'zbek tiliga o'gir. "
+                        "Inglizcha va ruscha so'zlar (hot dog, pizza, taxi) to'g'ri qolsin. "
+                        "Faqat tozalangan matnni qaytar, boshqa hech narsa qo'shma. "
+                        "Qisqa bo'lsin — bitta jumla."
+                    ),
+                },
+                {"role": "user", "content": raw_text},
+            ],
+            max_tokens=100,
+            temperature=0.3,
+        )
+        cleaned = response.choices[0].message.content.strip()
+        logger.info(f"GPT cleaned: '{raw_text}' → '{cleaned}'")
+        return cleaned if cleaned else raw_text
+    except Exception as e:
+        logger.warning(f"GPT cleanup failed, using raw text: {e}")
+        return raw_text
+
+
+async def clean_transcript(raw_text: str) -> str:
+    """Async wrapper for GPT transcript cleanup."""
+    if not os.getenv("OPENAI_API_KEY") or not raw_text.strip():
+        return raw_text
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _clean_transcript_sync, raw_text)
+
+
 # ── Google Cloud STT (Fallback) ──────────────────────────────
 
 _google_client = None

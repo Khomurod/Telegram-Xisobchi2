@@ -444,7 +444,9 @@ async def _show_demo_result(message: Message, state: FSMContext, parsed, raw: st
         cat = parsed.category or "boshqa"
         cat_emoji = CATEGORY_EMOJI.get(cat, "📦")
         amount_str = format_amount(parsed.amount, parsed.currency or "UZS")
-        desc = parsed.description or raw
+        # Clean up transcript for display
+        from app.services.speech_service import clean_transcript
+        desc = await clean_transcript(parsed.description or raw)
 
         await message.answer(
             "🧪 *Bot nima tushundi? (SINOV)*\n\n"
