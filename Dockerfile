@@ -21,7 +21,7 @@ RUN mkdir -p data temp
 EXPOSE 8000
 
 # Environment defaults
-ENV MODE=webhook
+ENV MODE=polling
 ENV WEBHOOK_PATH=/webhook
 ENV LOG_LEVEL=INFO
 
