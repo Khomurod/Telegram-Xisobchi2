@@ -58,7 +58,12 @@ class ReportService:
         for txn in transactions:
             emoji = "📈" if txn.type == "income" else "📉"
             cat = CATEGORY_DISPLAY.get(txn.category, txn.category)
-            time_str = txn.created_at.strftime("%H:%M") if txn.created_at else ""
+            # Convert to Uzbekistan time for display
+            if txn.created_at:
+                uzt_time = txn.created_at.astimezone(UZT)
+                time_str = uzt_time.strftime("%H:%M")
+            else:
+                time_str = ""
             lines.append(f"{emoji} {format_amount(txn.amount, txn.currency)} | {cat} | {time_str}")
 
             key = f"{txn.type}_{txn.currency.lower()}"
@@ -125,7 +130,12 @@ class ReportService:
         for txn in transactions:
             emoji = "📈" if txn.type == "income" else "📉"
             cat = CATEGORY_DISPLAY.get(txn.category, txn.category)
-            date_str = txn.created_at.strftime("%d.%m %H:%M") if txn.created_at else ""
+            # Convert to Uzbekistan time for display
+            if txn.created_at:
+                uzt_time = txn.created_at.astimezone(UZT)
+                date_str = uzt_time.strftime("%d.%m %H:%M")
+            else:
+                date_str = ""
             lines.append(f"{emoji} {format_amount(float(txn.amount), txn.currency)} | {cat} | {date_str}")
 
             key = f"{txn.type}_{txn.currency.lower()}"

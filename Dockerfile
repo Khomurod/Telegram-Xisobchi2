@@ -18,5 +18,6 @@ EXPOSE 8000
 ENV MODE=webhook
 ENV WEBHOOK_PATH=/webhook
 ENV LOG_LEVEL=INFO
+ENV TZ=Asia/Tashkent
 
 CMD ["python", "run.py"]
