@@ -92,7 +92,7 @@ async def handle_voice(message: types.Message, bot: Bot):
         return
 
     # Step 1: Acknowledge receipt
-    processing_msg = await message.answer("🎤 Ovozli xabar qabul qilindi. Qayta ishlanmoqda...")
+    processing_msg = await message.answer("⏳")
 
     try:
         # Step 2: Download voice file to memory (no disk I/O)
