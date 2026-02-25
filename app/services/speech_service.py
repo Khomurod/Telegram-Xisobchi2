@@ -74,7 +74,6 @@ async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> T
     response = await _openai_client.audio.transcriptions.create(
         model="whisper-1",
         file=(filename, audio_bytes, "audio/ogg"),
-        language="uz",
         response_format="json",
         prompt=(
             "33 minga hot dog oldim. Ovqatga 50 ming so'm sarfladim. "
