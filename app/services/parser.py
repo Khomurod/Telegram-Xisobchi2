@@ -186,6 +186,22 @@ MULTIPLIERS = {
     "тысяча": 1_000, "тысяч": 1_000, "тыс": 1_000,
 }
 
+# Common Uzbek case suffixes that may be attached to multiplier words
+# e.g. "mingga" (to/for 1000), "mingda" (at 1000), "mingdan" (from 1000)
+_UZB_SUFFIXES = ("ga", "ning", "ni", "dan", "da", "lik", "ta")
+
+
+def _strip_uzbek_suffix(word: str) -> str:
+    """Strip common Uzbek case suffixes from a word.
+    'mingga' → 'ming', 'milliondan' → 'million', etc.
+    """
+    for suffix in _UZB_SUFFIXES:
+        if word.endswith(suffix) and len(word) > len(suffix):
+            stripped = word[:-len(suffix)]
+            if stripped in MULTIPLIERS:
+                return stripped
+    return word
+
 
 # ── Public API ────────────────────────────────────────────────
 
@@ -268,17 +284,19 @@ def _extract_amount(text: str) -> Optional[float]:
     # Pattern 1: digit + multiplier + optional remainder
     # Handles: "30 ming 600" → 30*1000 + 600 = 30600
     #          "50 ming"     → 50*1000 = 50000
+    #          "25 mingga"   → 25*1000 = 25000 (suffixed form)
+    _suffix_alt = '(?:' + '|'.join(_UZB_SUFFIXES) + ')?'
     for mult_word, mult_val in MULTIPLIERS.items():
-        # Try compound first: "30 ming 600"
-        compound = rf'(\d+(?:\.\d+)?)\s*{re.escape(mult_word)}\s+(\d+(?:\.\d+)?)'
+        # Try compound first: "30 ming 600" or "30 mingga 600"
+        compound = rf'(\d+(?:\.\d+)?)\s*{re.escape(mult_word)}{_suffix_alt}\s+(\d+(?:\.\d+)?)'
         match = re.search(compound, text)
         if match:
             base = float(match.group(1)) * mult_val
             remainder = float(match.group(2))
             return base + remainder
 
-        # Simple: "50 ming"
-        simple = rf'(\d+(?:\.\d+)?)\s*{re.escape(mult_word)}'
+        # Simple: "50 ming" or "50 mingga"
+        simple = rf'(\d+(?:\.\d+)?)\s*{re.escape(mult_word)}{_suffix_alt}(?:\s|$)'
         match = re.search(simple, text)
         if match:
             return float(match.group(1)) * mult_val
@@ -335,10 +353,12 @@ def _parse_number_words(text: str) -> Optional[float]:
             else:
                 current += val
             found = True
-        elif word in MULTIPLIERS:
+        elif word in MULTIPLIERS or _strip_uzbek_suffix(word) != word:
+            # Handle bare "ming" and suffixed "mingga"/"mingdan" etc.
+            mult_key = word if word in MULTIPLIERS else _strip_uzbek_suffix(word)
             if current == 0:
                 current = 1
-            current *= MULTIPLIERS[word]
+            current *= MULTIPLIERS[mult_key]
             total += current
             current = 0
             found = True
