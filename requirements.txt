@@ -11,5 +11,4 @@ alembic==1.14.1
 python-dotenv==1.2.1
 aiofiles==25.1.0
 aiohttp==3.13.3
-# Speech-to-Text
-openai>=1.0.0
+# Speech-to-Text (Yandex SpeechKit — uses aiohttp above)

@@ -402,7 +402,7 @@ async def demo_voice(message: Message, state: FSMContext):
         await _show_demo_result(message, state, parsed, result.text)
 
     except RuntimeError:
-        logger.error("Whisper API not configured during demo voice")
+        logger.error("Yandex SpeechKit not configured during demo voice")
         await message.answer(
             "⚠️ Ovozli xabar xizmati hozircha ishlamayapti.\n"
             "Iltimos, matn yuboring yoki sinov bosqichini o'tkazib yuboring."

@@ -1,17 +1,17 @@
 """
-Speech-to-Text service — OpenAI Whisper (async, optimized for speed).
+Speech-to-Text service — Yandex SpeechKit (async, native Uzbek support).
 
 Optimized for minimum latency:
-  - AsyncOpenAI client (no thread executor overhead)
+  - Async HTTP via aiohttp (no thread executor overhead)
   - Accepts in-memory bytes (no disk I/O)
-  - Uses 'json' response format (faster than 'verbose_json')
-  - Client pre-warmed at import time
+  - OGG/Opus format (Telegram's native format — no conversion needed)
+  - Native Uzbek language support (uz-UZ)
 """
 import os
 import time
 from dataclasses import dataclass
 from typing import Optional
-from app.config import settings
+import aiohttp
 from app.utils.logger import setup_logger
 
 logger = setup_logger("speech")
@@ -26,74 +26,97 @@ class TranscriptionResult:
     language: str
 
 
-# ── OpenAI Whisper (Async, pre-warmed) ───────────────────────
+# ── Yandex SpeechKit API ─────────────────────────────────────
 
-_openai_client = None
-
-
-def _init_openai_client():
-    """Initialize the async OpenAI client. Called at import time."""
-    global _openai_client
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key:
-        logger.warning("OPENAI_API_KEY not set — speech-to-text will not work")
-        return
-    from openai import AsyncOpenAI
-    _openai_client = AsyncOpenAI(api_key=api_key)
-    logger.info("OpenAI Whisper async client initialized (pre-warmed)")
+_YANDEX_STT_URL = "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize"
+_yandex_api_key: Optional[str] = None
 
 
-# Pre-warm at import time — eliminates ~500ms first-request penalty
-_init_openai_client()
+def _init_yandex_client():
+    """Load Yandex API key from environment. Called at import time."""
+    global _yandex_api_key
+    _yandex_api_key = os.getenv("YANDEX_API_KEY", "")
+    if not _yandex_api_key:
+        logger.warning("YANDEX_API_KEY not set — speech-to-text will not work")
+    else:
+        logger.info("Yandex SpeechKit API key loaded (native Uzbek support)")
+
+
+# Load at import time
+_init_yandex_client()
 
 
 # ── Public async API ─────────────────────────────────────────
 
 async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> TranscriptionResult:
     """
-    Transcribe audio using Whisper API.
+    Transcribe audio using Yandex SpeechKit synchronous API.
 
     Accepts raw audio bytes (no disk I/O needed).
-    Uses AsyncOpenAI for zero thread-executor overhead.
-    Uses 'json' format for faster API response than 'verbose_json'.
+    Uses aiohttp for async HTTP — no thread-executor overhead.
+    OGG/Opus is Yandex's default format — zero conversion needed.
+    Native Uzbek language support (uz-UZ).
 
     Args:
         audio_bytes: Raw audio file content (OGG/OPUS from Telegram)
-        filename: Filename hint for the API (helps with format detection)
+        filename: Filename hint (unused by Yandex, kept for API compatibility)
     """
-    if not _openai_client:
+    if not _yandex_api_key:
         raise RuntimeError(
-            "OpenAI API key not configured. Set OPENAI_API_KEY env var."
+            "Yandex API key not configured. Set YANDEX_API_KEY env var."
         )
 
     start_time = time.time()
-    logger.info(f"Transcribing audio ({len(audio_bytes):,} bytes)")
+    logger.info(f"Transcribing audio ({len(audio_bytes):,} bytes) via Yandex SpeechKit")
 
-    # Use tuple format: (filename, file_bytes, content_type)
-    # This is the most reliable way to pass files to the OpenAI SDK
-    response = await _openai_client.audio.transcriptions.create(
-        model="whisper-1",
-        file=(filename, audio_bytes, "audio/ogg"),
-        response_format="json",
-        prompt=(
-            "33 minga hot dog oldim. Ovqatga 50 ming so'm sarfladim. "
-            "Pizza uchun 40 ming ishlatdim. Taksi 15 ming. "
-            "Maosh 5 million so'm oldim. Burger 25 mingga oldim. "
-            "Coca cola 8 ming. Transport 10 ming. "
-            "Dollar 100 oldim. Benzin 80 ming."
-        ),
-    )
+    params = {
+        "lang": "uz-UZ",
+        "format": "oggopus",
+    }
 
-    elapsed = time.time() - start_time
+    headers = {
+        "Authorization": f"Api-Key {_yandex_api_key}",
+    }
 
-    text = response.text.strip() if response.text else ""
-    confidence = 0.95 if text else 0.0
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                _YANDEX_STT_URL,
+                params=params,
+                headers=headers,
+                data=audio_bytes,
+            ) as resp:
+                elapsed = time.time() - start_time
 
-    logger.info(f"Whisper ({elapsed:.1f}s): {text[:150]}")
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logger.error(f"Yandex STT error {resp.status}: {error_text}")
+                    return TranscriptionResult(
+                        text="",
+                        confidence=0.0,
+                        duration_seconds=elapsed,
+                        language="uz",
+                    )
 
-    return TranscriptionResult(
-        text=text,
-        confidence=confidence,
-        duration_seconds=elapsed,
-        language="uz",
-    )
+                result = await resp.json()
+                text = result.get("result", "").strip()
+                confidence = 0.95 if text else 0.0
+
+                logger.info(f"Yandex STT ({elapsed:.1f}s): {text[:150]}")
+
+                return TranscriptionResult(
+                    text=text,
+                    confidence=confidence,
+                    duration_seconds=elapsed,
+                    language="uz",
+                )
+
+    except aiohttp.ClientError as e:
+        elapsed = time.time() - start_time
+        logger.error(f"Yandex STT network error ({elapsed:.1f}s): {e}")
+        return TranscriptionResult(
+            text="",
+            confidence=0.0,
+            duration_seconds=elapsed,
+            language="uz",
+        )
