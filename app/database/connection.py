@@ -34,6 +34,7 @@ if "postgresql" in db_url or "postgres" in db_url:
     engine = create_async_engine(
         db_url,
         echo=False,
+        pool_pre_ping=True,  # Validate connections before use (handles serverless DB cold-starts)
         connect_args={
             "ssl": "require",
             "statement_cache_size": 0,

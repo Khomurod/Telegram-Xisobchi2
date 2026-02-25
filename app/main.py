@@ -27,6 +27,16 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application in webhook mode...")
     await init_db()
 
+    # Warm up the DB connection pool — init_db() runs Alembic in a subprocess,
+    # so the main process has never connected yet.  Without this, the first
+    # user request hits a cold serverless Postgres and can time-out / fail.
+    try:
+        async with async_session() as session:
+            await session.execute(select(func.count()).select_from(User))
+        logger.info("Database connection pool warmed up ✓")
+    except Exception as e:
+        logger.warning(f"DB warmup query failed (non-fatal): {e}")
+
     # Set webhook with explicit allowed updates
     webhook_url = settings.webhook_full_url
     logger.info(f"Setting webhook to: {webhook_url}")
@@ -247,6 +257,15 @@ async def start_polling():
     """Start bot in polling mode for local development."""
     logger.info("Starting bot in polling mode...")
     await init_db()
+
+    # Warm up the DB connection pool (same reason as webhook mode)
+    try:
+        async with async_session() as session:
+            await session.execute(select(func.count()).select_from(User))
+        logger.info("Database connection pool warmed up ✓")
+    except Exception as e:
+        logger.warning(f"DB warmup query failed (non-fatal): {e}")
+
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Bot is running! Press Ctrl+C to stop.")
     try:
