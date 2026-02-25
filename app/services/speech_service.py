@@ -9,7 +9,6 @@ Optimized for minimum latency:
 """
 import os
 import time
-from io import BytesIO
 from dataclasses import dataclass
 from typing import Optional
 from app.config import settings
@@ -70,13 +69,11 @@ async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> T
     start_time = time.time()
     logger.info(f"Transcribing audio ({len(audio_bytes):,} bytes)")
 
-    # Wrap bytes in a file-like object with a name for the API
-    audio_file = BytesIO(audio_bytes)
-    audio_file.name = filename
-
+    # Use tuple format: (filename, file_bytes, content_type)
+    # This is the most reliable way to pass files to the OpenAI SDK
     response = await _openai_client.audio.transcriptions.create(
         model="whisper-1",
-        file=audio_file,
+        file=(filename, audio_bytes, "audio/ogg"),
         language="uz",
         response_format="json",
         prompt=(

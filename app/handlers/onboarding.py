@@ -377,7 +377,6 @@ async def demo_text(message: Message, state: FSMContext):
 @router.message(Onboarding.demo_mode, F.voice)
 async def demo_voice(message: Message, state: FSMContext):
     """Transcribe and parse voice in demo mode — show result but don't save."""
-    from io import BytesIO
     from aiogram import Bot
     from app.services.speech_service import transcribe_audio
     from app.services.parser import parse_transaction
@@ -387,9 +386,8 @@ async def demo_voice(message: Message, state: FSMContext):
     try:
         bot: Bot = message.bot
         file = await bot.get_file(message.voice.file_id)
-        audio_buffer = BytesIO()
-        await bot.download_file(file.file_path, destination=audio_buffer)
-        audio_bytes = audio_buffer.getvalue()
+        audio_io = await bot.download_file(file.file_path)
+        audio_bytes = audio_io.read()
 
         result = await transcribe_audio(audio_bytes)
 

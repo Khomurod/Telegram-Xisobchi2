@@ -1,5 +1,4 @@
 import time
-from io import BytesIO
 from collections import defaultdict
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -98,9 +97,8 @@ async def handle_voice(message: types.Message, bot: Bot):
     try:
         # Step 2: Download voice file to memory (no disk I/O)
         file = await bot.get_file(message.voice.file_id)
-        audio_buffer = BytesIO()
-        await bot.download_file(file.file_path, destination=audio_buffer)
-        audio_bytes = audio_buffer.getvalue()
+        audio_io = await bot.download_file(file.file_path)
+        audio_bytes = audio_io.read()
         logger.info(f"Downloaded voice to memory: {len(audio_bytes):,} bytes")
 
         # Step 3: Transcribe with Whisper (async, in-memory)
