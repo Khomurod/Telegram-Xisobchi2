@@ -20,14 +20,29 @@ logger = setup_logger("parser")
 
 # Common Whisper misrecognitions of Uzbek text
 _NORMALIZE_MAP = {
+    # Turkish/foreign characters Whisper sometimes outputs for Uzbek
     "ş": "sh", "ç": "ch", "ö": "o'", "ü": "u'",
+    "ğ": "g'", "ı": "i", "â": "a",
+    # Common Whisper misrecognitions of Uzbek words
     "owqat": "ovqat", "ovkat": "ovqat", "oqat": "ovqat",
     "sarfladam": "sarfladim", "sarflaam": "sarfladim",
     "toladim": "to'ladim", "toladi": "to'ladi",
     "berdm": "berdim",
     "oldm": "oldim",
-    " min ": " ming ", " mng ": " ming ",
+    # Common spelling variants (multi-char safe — no substring risk)
+    "sohm": "so'm", "soum": "so'm",
 }
+
+# Regex-based normalization for words that need word-boundary awareness
+_NORMALIZE_REGEX = [
+    # "min" / "mng" as standalone word → "ming" (handles start, mid, end of text)
+    (re.compile(r'\bmin\b'), 'ming'),
+    (re.compile(r'\bmng\b'), 'ming'),
+    (re.compile(r'\bsom\b'), "so'm"),     # "som" as standalone word
+    (re.compile(r'\bmash\b'), 'maosh'),   # "mash" as standalone word
+    # Trailing period from Whisper (single dot, not just ellipsis)
+    (re.compile(r'\.$'), ''),
+]
 
 
 def _normalize_text(text: str) -> str:
@@ -38,6 +53,9 @@ def _normalize_text(text: str) -> str:
     # Apply character and word replacements
     for old, new in _NORMALIZE_MAP.items():
         text = text.replace(old, new)
+    # Apply regex-based word-boundary replacements (handles start/end of text)
+    for pattern, replacement in _NORMALIZE_REGEX:
+        text = pattern.sub(replacement, text)
     # Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     return text
@@ -191,14 +209,17 @@ MULTIPLIERS = {
 _UZB_SUFFIXES = ("ga", "ning", "ni", "dan", "da", "lik", "ta")
 
 
-def _strip_uzbek_suffix(word: str) -> str:
+def _strip_uzbek_suffix(word: str, lookup: dict = None) -> str:
     """Strip common Uzbek case suffixes from a word.
-    'mingga' → 'ming', 'milliondan' → 'million', etc.
+    'mingga' → 'ming', 'milliondan' → 'million', 'yuzga' → 'yuz', etc.
+    If lookup dict is provided, checks against that; otherwise checks MULTIPLIERS.
     """
+    if lookup is None:
+        lookup = MULTIPLIERS
     for suffix in _UZB_SUFFIXES:
         if word.endswith(suffix) and len(word) > len(suffix):
             stripped = word[:-len(suffix)]
-            if stripped in MULTIPLIERS:
+            if stripped in lookup:
                 return stripped
     return word
 
@@ -275,11 +296,15 @@ def _extract_amount(text: str) -> Optional[float]:
     """Extract numeric amount from text."""
     text = text.replace(",", "").replace("\u00a0", " ")
 
-    # Special: "yarim million" = 500k
-    if "yarim million" in text or "yarim mln" in text:
-        return 500_000.0
-    if "yarim milliard" in text:
-        return 500_000_000.0
+    # Special: "bir yarim million" = 1.5M, "bir yarim ming" = 1500, etc.
+    for mult_word, mult_val in MULTIPLIERS.items():
+        if f"bir yarim {mult_word}" in text:
+            return mult_val * 1.5
+
+    # Special: "yarim million" = 500k, "yarim ming" = 500, etc.
+    for mult_word, mult_val in MULTIPLIERS.items():
+        if f"yarim {mult_word}" in text:
+            return mult_val * 0.5
 
     # Pattern 1: digit + multiplier + optional remainder
     # Handles: "30 ming 600" → 30*1000 + 600 = 30600
@@ -345,8 +370,10 @@ def _parse_number_words(text: str) -> Optional[float]:
     found = False
 
     for word in words:
-        if word in NUMBER_WORDS:
-            val = NUMBER_WORDS[word]
+        # Check for number words (including suffixed forms like "yuzga" → "yuz")
+        num_key = word if word in NUMBER_WORDS else _strip_uzbek_suffix(word, NUMBER_WORDS)
+        if num_key in NUMBER_WORDS:
+            val = NUMBER_WORDS[num_key]
             if val == 100:
                 # "besh yuz" → 5 * 100
                 current = (current if current > 0 else 1) * 100
@@ -372,17 +399,38 @@ def _parse_number_words(text: str) -> Optional[float]:
 
 def _detect_currency(text: str) -> str:
     """Detect USD or default to UZS."""
-    dollar_hints = ["dollar", "доллар", "$", "usd", "aqsh"]
+    dollar_hints = [
+        "dollar", "dollarni", "dollarga",
+        "доллар", "$", "usd", "aqsh",
+    ]
     for hint in dollar_hints:
         if hint in text:
             return "USD"
     return "UZS"
 
 
+# Keywords that are too short for safe substring matching (could match inside
+# longer unrelated words, e.g. "uy" inside "buyum"). These use word-start
+# boundary \b at the beginning so suffixed forms ("uyga", "gazga") still match.
+_SHORT_KW_MIN_LEN = 4  # keywords shorter than this get boundary-checked
+
+
 def _detect_category(text: str) -> str:
-    """Match text against category keyword lists."""
+    """Match text against category keyword lists.
+    Uses substring matching for longer keywords (naturally handles Uzbek
+    suffixed forms like ovqatga, taksiga, restoranda). Short keywords
+    (< 4 chars) use word-start boundary to prevent false positives.
+    """
     for category, keywords in CATEGORIES.items():
         for kw in keywords:
-            if kw in text:
-                return category
+            if len(kw) < _SHORT_KW_MIN_LEN:
+                # Short keyword — require word-start boundary
+                # \b at start prevents "buyum" matching "uy"
+                # No \b at end so "uyga" still matches "uy"
+                if re.search(rf'\b{re.escape(kw)}', text):
+                    return category
+            else:
+                # Longer keyword — safe to use substring matching
+                if kw in text:
+                    return category
     return "boshqa"
