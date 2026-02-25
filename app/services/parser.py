@@ -29,6 +29,7 @@ _NORMALIZE_MAP = {
     "toladim": "to'ladim", "toladi": "to'ladi",
     "berdm": "berdim",
     "oldm": "oldim",
+    "binzin": "benzin",
     # Common spelling variants (multi-char safe — no substring risk)
     "sohm": "so'm", "soum": "so'm",
 }
@@ -206,7 +207,7 @@ MULTIPLIERS = {
 
 # Common Uzbek case suffixes that may be attached to multiplier words
 # e.g. "mingga" (to/for 1000), "mingda" (at 1000), "mingdan" (from 1000)
-_UZB_SUFFIXES = ("ga", "ning", "ni", "dan", "da", "lik", "ta")
+_UZB_SUFFIXES = ("ga", "a", "ning", "ni", "dan", "da", "lik", "ta")
 
 
 def _strip_uzbek_suffix(word: str, lookup: dict = None) -> str:
