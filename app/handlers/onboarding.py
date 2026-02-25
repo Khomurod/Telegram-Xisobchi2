@@ -377,26 +377,21 @@ async def demo_text(message: Message, state: FSMContext):
 @router.message(Onboarding.demo_mode, F.voice)
 async def demo_voice(message: Message, state: FSMContext):
     """Transcribe and parse voice in demo mode — show result but don't save."""
+    from io import BytesIO
     from aiogram import Bot
     from app.services.speech_service import transcribe_audio
     from app.services.parser import parse_transaction
-    import tempfile, os
 
     await message.answer("⏳ Ovozingizni tahlil qilyapman...⁠🔊")
 
     try:
         bot: Bot = message.bot
         file = await bot.get_file(message.voice.file_id)
-        suffix = ".ogg"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp_path = tmp.name
+        audio_buffer = BytesIO()
+        await bot.download_file(file.file_path, destination=audio_buffer)
+        audio_bytes = audio_buffer.getvalue()
 
-        try:
-            await bot.download_file(file.file_path, destination=tmp_path)
-            result = await transcribe_audio(tmp_path)
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+        result = await transcribe_audio(audio_bytes)
 
         if not result.text:
             await message.answer(
@@ -408,8 +403,8 @@ async def demo_voice(message: Message, state: FSMContext):
         parsed = parse_transaction(result.text)
         await _show_demo_result(message, state, parsed, result.text)
 
-    except FileNotFoundError:
-        logger.error("Google credentials not found during demo voice")
+    except RuntimeError:
+        logger.error("Whisper API not configured during demo voice")
         await message.answer(
             "⚠️ Ovozli xabar xizmati hozircha ishlamayapti.\n"
             "Iltimos, matn yuboring yoki sinov bosqichini o'tkazib yuboring."

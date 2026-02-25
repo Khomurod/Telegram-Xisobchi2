@@ -32,10 +32,6 @@ class Settings:
         return raw
 
 
-    # Google Cloud Speech-to-Text
-    GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
-    SPEECH_LANGUAGE: str = os.getenv("SPEECH_LANGUAGE", "uz-UZ")
-    SPEECH_ALT_LANGUAGES: list = os.getenv("SPEECH_ALT_LANGUAGES", "ru-RU").split(",")
 
     # Voice limits
     MAX_VOICE_DURATION: int = int(os.getenv("MAX_VOICE_DURATION", "60"))

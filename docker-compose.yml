@@ -11,4 +11,3 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data                    # Persist database
-      - ./credentials.json:/app/credentials.json:ro  # Google Cloud credentials

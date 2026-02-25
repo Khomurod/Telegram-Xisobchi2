@@ -1,10 +1,5 @@
 FROM python:3.12-slim
 
-# System deps for audio conversion (OGG → WAV via ffmpeg)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Install Python deps
@@ -14,8 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Create data directory
-RUN mkdir -p data temp
+RUN mkdir -p data
 
 # Expose webhook port
 EXPOSE 8000

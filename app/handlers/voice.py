@@ -1,5 +1,5 @@
-import os
 import time
+from io import BytesIO
 from collections import defaultdict
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -17,10 +17,6 @@ from app.utils.logger import setup_logger
 
 logger = setup_logger("voice_handler")
 router = Router()
-
-# Ensure temp directory exists
-TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "temp")
-os.makedirs(TEMP_DIR, exist_ok=True)
 
 # ── Rate limiter (in-memory) ─────────────────────────────────
 
@@ -100,22 +96,15 @@ async def handle_voice(message: types.Message, bot: Bot):
     processing_msg = await message.answer("🎤 Ovozli xabar qabul qilindi. Qayta ishlanmoqda...")
 
     try:
-        # Step 2: Download voice file
+        # Step 2: Download voice file to memory (no disk I/O)
         file = await bot.get_file(message.voice.file_id)
-        local_path = os.path.join(TEMP_DIR, f"{message.voice.file_id}.ogg")
-        await bot.download_file(file.file_path, destination=local_path)
+        audio_buffer = BytesIO()
+        await bot.download_file(file.file_path, destination=audio_buffer)
+        audio_bytes = audio_buffer.getvalue()
+        logger.info(f"Downloaded voice to memory: {len(audio_bytes):,} bytes")
 
-        try:
-            logger.info(f"Downloaded voice to: {local_path}")
-            # Step 3: Transcribe with Google Cloud STT
-            result = await transcribe_audio(local_path)
-        finally:
-            # Ensure OGG cleanup even if transcribe_audio doesn't reach its own finally
-            if os.path.exists(local_path):
-                try:
-                    os.remove(local_path)
-                except OSError:
-                    pass
+        # Step 3: Transcribe with Whisper (async, in-memory)
+        result = await transcribe_audio(audio_bytes)
 
         if not result.text:
             await processing_msg.edit_text(

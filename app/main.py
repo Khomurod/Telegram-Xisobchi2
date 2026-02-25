@@ -1,6 +1,5 @@
 import asyncio
 import os
-import glob
 import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -19,24 +18,6 @@ logger = setup_logger("main")
 # Webhook secret token — prevents fake Telegram updates
 _webhook_secret = os.getenv("WEBHOOK_SECRET", secrets.token_hex(32))
 
-# Temp directory for voice file processing
-TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp")
-
-
-def _cleanup_temp():
-    """Remove orphaned audio files from temp directory on startup."""
-    if not os.path.exists(TEMP_DIR):
-        return
-    removed = 0
-    for pattern in ("*.ogg", "*.wav"):
-        for f in glob.glob(os.path.join(TEMP_DIR, pattern)):
-            try:
-                os.remove(f)
-                removed += 1
-            except OSError:
-                pass
-    if removed:
-        logger.info(f"Cleaned up {removed} orphaned temp files")
 
 
 # ── FastAPI app (webhook mode) ────────────────────────────────
@@ -44,7 +25,6 @@ def _cleanup_temp():
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle for webhook mode."""
     logger.info("Starting application in webhook mode...")
-    _cleanup_temp()
     await init_db()
 
     # Set webhook with explicit allowed updates
@@ -266,7 +246,6 @@ async def webhook(request: Request):
 async def start_polling():
     """Start bot in polling mode for local development."""
     logger.info("Starting bot in polling mode...")
-    _cleanup_temp()
     await init_db()
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Bot is running! Press Ctrl+C to stop.")
