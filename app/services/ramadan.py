@@ -10,7 +10,7 @@ Designed for future extensibility:
   - Cache is per-city to support multiple users in different cities
 """
 import time
-from datetime import datetime
+from datetime import datetime, date
 from dataclasses import dataclass
 from typing import Optional
 import aiohttp
@@ -44,22 +44,35 @@ class FastingTimes:
     hijri_year: str     # Hijri year
 
 
-async def get_fasting_times(city: str = "Tashkent") -> Optional[FastingTimes]:
+async def get_fasting_times(city: str = "Tashkent", target_date: Optional[date] = None) -> Optional[FastingTimes]:
     """
-    Fetch today's fasting times for a city in Uzbekistan.
+    Fetch fasting times for a city in Uzbekistan.
+
+    Args:
+        city: Aladhan API city name (e.g. "Tashkent", "Samarkand")
+        target_date: Specific date to fetch. None = today (default).
 
     Returns FastingTimes dataclass or None on failure.
-    Results are cached per-city for 6 hours.
+    Results are cached per city+date for 6 hours.
     """
+    # Build cache key (city + date)
+    date_str = target_date.strftime("%d-%m-%Y") if target_date else "today"
+    cache_key = f"{city}_{date_str}"
+
     # Check cache
     now = time.time()
-    if city in _cache:
-        cached_data, cached_at = _cache[city]
+    if cache_key in _cache:
+        cached_data, cached_at = _cache[cache_key]
         if now - cached_at < _CACHE_TTL:
-            logger.debug(f"Cache hit for {city}")
+            logger.debug(f"Cache hit for {cache_key}")
             return _parse_response(cached_data, city)
 
-    # Fetch from API
+    # Build API URL — date goes in the URL path
+    if target_date:
+        url = f"{_ALADHAN_URL}/{target_date.strftime('%d-%m-%Y')}"
+    else:
+        url = _ALADHAN_URL
+
     params = {
         "city": city,
         "country": "Uzbekistan",
@@ -69,34 +82,34 @@ async def get_fasting_times(city: str = "Tashkent") -> Optional[FastingTimes]:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                _ALADHAN_URL,
+                url,
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status != 200:
-                    logger.error(f"Aladhan API error {resp.status} for {city}")
-                    return _get_cached_fallback(city)
+                    logger.error(f"Aladhan API error {resp.status} for {cache_key}")
+                    return _get_cached_fallback(cache_key, city)
 
                 data = await resp.json()
                 if data.get("code") != 200:
-                    logger.error(f"Aladhan API returned non-200 code for {city}")
-                    return _get_cached_fallback(city)
+                    logger.error(f"Aladhan API returned non-200 code for {cache_key}")
+                    return _get_cached_fallback(cache_key, city)
 
                 # Cache the raw response
-                _cache[city] = (data, now)
-                logger.info(f"Fetched fasting times for {city}")
+                _cache[cache_key] = (data, now)
+                logger.info(f"Fetched fasting times for {cache_key}")
                 return _parse_response(data, city)
 
     except (aiohttp.ClientError, Exception) as e:
-        logger.error(f"Aladhan API request failed for {city}: {e}")
-        return _get_cached_fallback(city)
+        logger.error(f"Aladhan API request failed for {cache_key}: {e}")
+        return _get_cached_fallback(cache_key, city)
 
 
-def _get_cached_fallback(city: str) -> Optional[FastingTimes]:
+def _get_cached_fallback(cache_key: str, city: str) -> Optional[FastingTimes]:
     """Return stale cached data if available (better than nothing)."""
-    if city in _cache:
-        cached_data, _ = _cache[city]
-        logger.warning(f"Using stale cache for {city}")
+    if cache_key in _cache:
+        cached_data, _ = _cache[cache_key]
+        logger.warning(f"Using stale cache for {cache_key}")
         return _parse_response(cached_data, city)
     return None
 

@@ -48,7 +48,7 @@ async def cmd_balance(message: types.Message):
             txn_repo = TransactionRepository(session)
             report = ReportService(txn_repo)
             text = await report.get_balance(user.id)
-        await message.answer(text, parse_mode="Markdown")
+        await message.answer(text, parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
         logger.info(f"Balance report sent to user {message.from_user.id}")
     except Exception as e:
         logger.error(f"Error in /balans: {e}")
@@ -65,7 +65,7 @@ async def cmd_today(message: types.Message):
             txn_repo = TransactionRepository(session)
             report = ReportService(txn_repo)
             text = await report.get_today_report(user.id)
-        await message.answer(text, parse_mode="Markdown")
+        await message.answer(text, parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
         logger.info(f"Today report sent to user {message.from_user.id}")
     except Exception as e:
         logger.error(f"Error in /bugun: {e}")
@@ -116,7 +116,7 @@ async def cmd_full_report(message: types.Message):
             txn_repo = TransactionRepository(session)
             report = ReportService(txn_repo)
             text = await report.get_full_report(user.id)
-        await message.answer(text, parse_mode="Markdown")
+        await message.answer(text, parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
         logger.info(f"Full report sent to user {message.from_user.id}")
     except Exception as e:
         logger.error(f"Error in /hisobot: {e}")

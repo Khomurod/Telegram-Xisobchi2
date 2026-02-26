@@ -1,7 +1,7 @@
 """
 Ramadan handler — shows fasting times, duas, and Ramadan info.
 
-Triggered by the 🌙 Ramazon keyboard button.
+Triggered by the 🌙 Ramazon keyboard button or /ramazon command.
 Supports all Uzbekistan cities — users pick their city on first use,
 and the preference is stored in the database.
 
@@ -9,18 +9,20 @@ Designed for future auto-notification support:
   - User city is stored persistently
   - get_fasting_times() returns all data needed for scheduled notifications
 """
+from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
+from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.services.ramadan import get_fasting_times, get_iftar_countdown, is_ramadan_active
-from app.constants import UZBEKISTAN_CITIES
+from app.constants import UZBEKISTAN_CITIES, UZT
 from app.utils.logger import setup_logger
 
 logger = setup_logger("ramadan_handler")
@@ -55,9 +57,10 @@ IFTORLIK_DUA = (
 )
 
 
-# ── 🌙 Ramazon button handler ───────────────────────────────
+# ── 🌙 Ramazon button + /ramazon command ────────────────────
 
 @router.message(F.text == "🌙 Ramazon")
+@router.message(Command("ramazon"))
 async def btn_ramazon(message: Message, state: FSMContext):
     """Show Ramadan fasting times for the user's city."""
     if not is_ramadan_active():
@@ -78,7 +81,7 @@ async def btn_ramazon(message: Message, state: FSMContext):
             await _show_city_picker(message, state)
             return
 
-        # Show fasting times for saved city
+        # Show fasting times for saved city (today)
         await _show_fasting_times(message, user.city)
 
     except Exception as e:
@@ -131,8 +134,7 @@ async def handle_city_selection(callback: CallbackQuery, state: FSMContext):
 
         # Edit the city picker message to show confirmation
         await callback.message.edit_text(
-            f"✅ Shahringiz: *{display_name}*\n\n"
-            "Endi 🌙 Ramazon tugmasini bosing — vaqtlar ko'rsatiladi.",
+            f"✅ Shahringiz: *{display_name}*",
             parse_mode="Markdown",
         )
 
@@ -148,11 +150,16 @@ async def handle_city_selection(callback: CallbackQuery, state: FSMContext):
 
 # ── Fasting times display ────────────────────────────────────
 
-async def _show_fasting_times(message: Message, city_key: str):
-    """Fetch and display today's fasting times."""
+async def _show_fasting_times(message: Message, city_key: str, tomorrow: bool = False):
+    """Fetch and display fasting times (today or tomorrow)."""
     display_name = UZBEKISTAN_CITIES.get(city_key, city_key)
 
-    times = await get_fasting_times(city_key)
+    # Determine target date
+    target_date = None
+    if tomorrow:
+        target_date = (datetime.now(UZT) + timedelta(days=1)).date()
+
+    times = await get_fasting_times(city_key, target_date=target_date)
 
     if not times:
         await message.answer(
@@ -161,48 +168,83 @@ async def _show_fasting_times(message: Message, city_key: str):
         )
         return
 
-    # Countdown to iftar
-    countdown = get_iftar_countdown(times.maghrib)
-    countdown_line = ""
-    if countdown:
-        countdown_line = f"\n⏳ *Iftorgacha:* {countdown}\n"
+    # Header — today vs tomorrow
+    if tomorrow:
+        header = f"📅 *Ertaga — {display_name}*"
+        countdown_line = ""  # No countdown for tomorrow
     else:
-        countdown_line = "\n🎉 *Bugungi iftor vaqti o'tdi!*\n"
+        header = f"🌙 *Ramazon — {display_name}*"
+        # Countdown to iftar (only for today)
+        countdown = get_iftar_countdown(times.maghrib)
+        if countdown:
+            countdown_line = f"\n⏳ *Iftorgacha:* {countdown}\n"
+        else:
+            countdown_line = "\n🎉 *Bugungi iftor vaqti o\u2019tdi!*\n"
 
     # Ramadan day info
-    day_info = ""
     if times.hijri_month == 9:  # Ramadan
         day_info = f"📅 *{times.ramadan_day}-kun* / 30"
     else:
         day_info = "📅 Ramazon"
 
     text = (
-        f"🌙 *Ramazon — {display_name}*\n\n"
+        f"{header}\n\n"
         f"{day_info}\n\n"
         f"🍽 *Saharlik tugashi (imsok):* {times.imsak}\n"
         f"🌅 *Bomdod (fajr):* {times.fajr}\n"
         f"☀️ *Quyosh chiqishi:* {times.sunrise}\n\n"
-        f"🌆 *Iftorlik (mag'rib):* {times.maghrib}\n"
+        f"🌆 *Iftorlik (mag\u2019rib):* {times.maghrib}\n"
         f"{countdown_line}\n"
         "─────────────────"
     )
 
-    # Inline buttons for duas and city change
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📿 Duolar",
-                callback_data="ram_duas",
-            ),
-            InlineKeyboardButton(
-                text="🏙 Shaharni o'zgartirish",
-                callback_data="ram_changecity",
-            ),
-        ],
-    ])
+    # Build inline buttons
+    buttons = []
+    if tomorrow:
+        # On tomorrow view: show "Back to today" button
+        buttons.append(InlineKeyboardButton(
+            text="⬅️ Bugun",
+            callback_data=f"ram_today_{city_key}",
+        ))
+    else:
+        # On today view: show "Tomorrow" button
+        buttons.append(InlineKeyboardButton(
+            text="📅 Ertaga",
+            callback_data=f"ram_tomorrow_{city_key}",
+        ))
+
+    buttons.append(InlineKeyboardButton(
+        text="📿 Duolar",
+        callback_data="ram_duas",
+    ))
+    buttons.append(InlineKeyboardButton(
+        text="🏙 Shahar",
+        callback_data="ram_changecity",
+    ))
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[buttons])
 
     await message.answer(text, parse_mode="Markdown", reply_markup=kb)
-    logger.info(f"Ramadan times shown for {display_name} (day {times.ramadan_day})")
+    label = "tomorrow" if tomorrow else "today"
+    logger.info(f"Ramadan times ({label}) shown for {display_name} (day {times.ramadan_day})")
+
+
+# ── Tomorrow / Today callbacks ───────────────────────────────
+
+@router.callback_query(F.data.startswith("ram_tomorrow_"))
+async def handle_tomorrow(callback: CallbackQuery):
+    """Show tomorrow's fasting times."""
+    city_key = callback.data.replace("ram_tomorrow_", "")
+    await callback.answer()
+    await _show_fasting_times(callback.message, city_key, tomorrow=True)
+
+
+@router.callback_query(F.data.startswith("ram_today_"))
+async def handle_today(callback: CallbackQuery):
+    """Switch back to today's fasting times."""
+    city_key = callback.data.replace("ram_today_", "")
+    await callback.answer()
+    await _show_fasting_times(callback.message, city_key, tomorrow=False)
 
 
 # ── Duas callback ────────────────────────────────────────────
