@@ -243,8 +243,10 @@ async def btn_yordam(message: types.Message):
 @router.message(F.text == "🤝 Tavsiya")
 async def btn_recommend(message: types.Message):
     """Show referral promo and share button."""
-    import urllib.parse
 
+    # switch_inline_query is the only officially cross-platform way to open
+    # Telegram's chat-picker on Android, iOS AND desktop.
+    # When tapped, Telegram opens a forwarding picker pre-filled with the text.
     share_text = (
         "🎙 Xisobchi Bot — shaxsiy moliyaviy yordamchi!\n\n"
         "✅ Ovozli yoki matnli xabar yuboring — bot avtomatik kirim/chiqimni qayd etadi\n"
@@ -254,12 +256,10 @@ async def btn_recommend(message: types.Message):
         "🚀 Hoziroq sinab ko'ring 👉 @xisobchiman1_bot"
     )
 
-    share_url = f"https://t.me/share/url?text={urllib.parse.quote(share_text)}"
-
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📤 Do'stga yuborish", url=share_url)],
+        [InlineKeyboardButton(text="📤 Do'stga yuborish", switch_inline_query=share_text)],
     ])
 
     await message.answer(
@@ -271,3 +271,50 @@ async def btn_recommend(message: types.Message):
         reply_markup=keyboard,
     )
     logger.info(f"User {message.from_user.id} opened referral share")
+
+
+# ── Inline query handler ──────────────────────────────────────
+# Triggered when a user picks a chat after tapping "Do'stga yuborish".
+# Responds with a rich card that includes a "Botni sinab ko'rish" button.
+
+@router.inline_query()
+async def inline_share(query: types.InlineQuery):
+    """Return a rich share card with a bot link button."""
+    from aiogram.types import (
+        InlineQueryResultArticle,
+        InputTextMessageContent,
+        InlineKeyboardMarkup,
+        InlineKeyboardButton,
+    )
+
+    card_text = (
+        "🎙 *Xisobchi Bot* — shaxsiy moliyaviy yordamchi!\n\n"
+        "✅ Ovozli yoki matnli xabar yuboring — bot avtomatik kirim/chiqimni qayd etadi\n"
+        "✅ Sun'iy intellekt kategoriyani o'zi aniqlaydi\n"
+        "✅ Balans, hisobot, eksport — bir tugma bilan\n"
+        "✅ 100% bepul, 100% xavfsiz"
+    )
+
+    open_btn = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="🚀 Botni sinab ko'rish",
+            url="https://t.me/xisobchiman1_bot",
+        ),
+    ]])
+
+    results = [
+        InlineQueryResultArticle(
+            id="share_xisobchi",
+            title="Xisobchi Bot — moliyaviy yordamchi",
+            description="Do'stingizga yuboring — 100% bepul va xavfsiz",
+            input_message_content=InputTextMessageContent(
+                message_text=card_text,
+                parse_mode="Markdown",
+            ),
+            reply_markup=open_btn,
+        )
+    ]
+
+    await query.answer(results, cache_time=300, is_personal=False)
+    logger.info(f"Inline share card served to user {query.from_user.id}")
+

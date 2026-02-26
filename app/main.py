@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Setting webhook to: {webhook_url}")
     await bot.set_webhook(
         url=webhook_url,
-        allowed_updates=["message", "callback_query"],
+        allowed_updates=["message", "callback_query", "inline_query"],
         drop_pending_updates=True,
         secret_token=_webhook_secret,
     )
