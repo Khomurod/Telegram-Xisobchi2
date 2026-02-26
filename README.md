@@ -171,6 +171,35 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 | Backend Hosting | Render (webhook mode) |
 | Keep-Alive | Koyeb pinger service |
 
+## Production Audit (Feb 2026)
+
+> ✅ **Verdict: Production-Ready**
+
+### Strengths
+- Clean layered architecture (handlers → services → repositories → models)
+- Fully async end-to-end (aiogram, SQLAlchemy, aiohttp)
+- Webhook secret validation on all Telegram updates
+- Admin endpoints protected by `X-Admin-Token` header
+- Ownership checks on edit/delete operations
+- Voice rate limiting (10/min per user)
+- Alembic migrations with 3-scenario startup handling
+- SSL enforced + `pool_pre_ping` + `statement_cache_size=0` for PgBouncer
+- In-memory voice pipeline (no disk I/O, OGG native format)
+- Confirmation flow prevents accidental data entry
+- Pending confirmations have 5-min TTL with stale cleanup
+
+### Known Issues (non-blocking)
+| # | Severity | Issue | Status |
+|---|----------|-------|--------|
+| 1 | 🔴 | `credentials.json` may have been committed to git history | Verify & rotate if needed |
+| 2 | 🟡 | `/stats` endpoint is intentionally unauthenticated | Acceptable (public dashboard) |
+| 3 | 🟡 | In-memory pending confirmations lost on restart | Low risk (5-min TTL) |
+| 4 | 🟡 | Broadcast could timeout for large user bases (500+) | Future: background task |
+| 5 | 🟢 | Yandex confidence hardcoded to 0.95 | Defensive, non-harmful |
+| 6 | 🟢 | FSM storage is in-memory (default MemoryStorage) | Low risk for short flows |
+| 7 | 🟢 | Health check doesn't ping database | Consider adding DB ping |
+| 8 | 🟢 | Admin token comparison is not timing-safe | Very low risk (internal API) |
+
 ## Roadmap
 
 - [x] PostgreSQL migration

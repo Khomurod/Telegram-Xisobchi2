@@ -56,6 +56,13 @@ class UserRepository(BaseRepository):
             user.first_name = first_name
             await self.session.commit()
 
+    async def update_city(self, telegram_id: int, city: str) -> None:
+        """Save user's city preference (for Ramadan fasting times)."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            user.city = city
+            await self.session.commit()
+
     async def get_total_count(self) -> int:
         """Return total number of registered users."""
         result = await self.session.execute(select(func.count(User.id)))
