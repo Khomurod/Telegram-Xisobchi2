@@ -284,15 +284,14 @@ async def onboarding_contact_text_fallback(message: Message, state: FSMContext):
 
 # ── Step 3: Feature walkthrough ──────────────────────────────
 
-async def _send_walkthrough_step(message: Message, state: FSMContext, idx: int):
-    """Send a walkthrough message with inline navigation buttons inside the bubble."""
+async def _send_walkthrough_step(message: Message, state: FSMContext, idx: int, edit: bool = False):
+    """Send (or edit in-place) a walkthrough message with inline navigation buttons."""
     if idx >= len(WALKTHROUGH):
-        await _finish_onboarding(message, state)
+        await _finish_onboarding(message, state, edit=True)
         return
 
     # Build inline navigation buttons
     if idx < len(WALKTHROUGH) - 1:
-        # Not the last step
         nav_kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
                 text="➡️ Keyingi",
@@ -306,7 +305,6 @@ async def _send_walkthrough_step(message: Message, state: FSMContext, idx: int):
             ),
         ]])
     else:
-        # Last step — only a green Start button
         nav_kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
                 text="🚀 Boshlash!",
@@ -316,33 +314,33 @@ async def _send_walkthrough_step(message: Message, state: FSMContext, idx: int):
         ]])
 
     step_label = f"_{idx + 1}/{len(WALKTHROUGH)}_"
-    await message.answer(
-        f"{WALKTHROUGH[idx]}\n\n{step_label}",
-        parse_mode="Markdown",
-        reply_markup=nav_kb,
-    )
+    text = f"{WALKTHROUGH[idx]}\n\n{step_label}"
+
+    if edit:
+        await message.edit_text(text, parse_mode="Markdown", reply_markup=nav_kb)
+    else:
+        await message.answer(text, parse_mode="Markdown", reply_markup=nav_kb)
 
 
 @router.callback_query(Onboarding.walkthrough_step, F.data == "walk_next")
 async def walkthrough_next(callback: CallbackQuery, state: FSMContext):
-    """Advance to the next walkthrough step."""
+    """Advance to the next walkthrough step — edit existing message in place."""
     await callback.answer()
     data = await state.get_data()
     idx = data.get("walkthrough_idx", 0) + 1
     await state.update_data(walkthrough_idx=idx)
-    await _send_walkthrough_step(callback.message, state, idx)
+    await _send_walkthrough_step(callback.message, state, idx, edit=True)
 
 
 @router.callback_query(Onboarding.walkthrough_step, F.data == "walk_skip")
 async def walkthrough_finish(callback: CallbackQuery, state: FSMContext):
-    """Skip remaining walkthrough or finish last step."""
+    """Skip remaining walkthrough or finish last step — edit existing message in place."""
     await callback.answer()
-    await _finish_onboarding(callback.message, state)
+    await _finish_onboarding(callback.message, state, edit=True)
 
 
-async def _finish_onboarding(message: Message, state: FSMContext):
+async def _finish_onboarding(message: Message, state: FSMContext, edit: bool = False):
     """Show demo invite after walkthrough is done."""
-    # Get name from FSM data — message.from_user may be the bot when called from a callback
     data = await state.get_data()
     name = data.get("user_first_name") or message.from_user.first_name or "do'stim"
     await state.set_state(Onboarding.demo_mode)
@@ -355,17 +353,20 @@ async def _finish_onboarding(message: Message, state: FSMContext):
         ),
     ]])
 
-    await message.answer(
+    text = (
         f"🎉 *Ajoyib, {name}! Siz tayyor!*\n\n"
         "🧪 *Sinab ko'ramizmi?*\n\n"
         "Menga bitta ovozli yoki matnli xabar yuboring — "
         "masalan, bugun qilgan xarajatingizni ayting.\n\n"
         "⚠️ *Bu faqat sinov — hech narsa saqlanmaydi!*\n"
-        "Natijani ko'rsataman, keyin asosiy rejimga o'tamiz. 👇",
-        parse_mode="Markdown",
-        reply_markup=demo_kb,
+        "Natijani ko'rsataman, keyin asosiy rejimga o'tamiz. 👇"
     )
-    logger.info(f"User entered demo mode")
+
+    if edit:
+        await message.edit_text(text, parse_mode="Markdown", reply_markup=demo_kb)
+    else:
+        await message.answer(text, parse_mode="Markdown", reply_markup=demo_kb)
+    logger.info("User entered demo mode")
 
 
 async def _show_main_keyboard(message: Message, state: FSMContext):

@@ -28,9 +28,10 @@ class UserRepository(BaseRepository):
         if not user:
             user = await self.create(telegram_id, first_name, username)
         else:
-            # Update profile fields if they've changed since last seen
             changed = False
-            if first_name and user.first_name != first_name:
+            # Only use Telegram profile name as a fallback when no name has been stored yet.
+            # Once the user types their own name during onboarding, never overwrite it.
+            if first_name and user.first_name is None:
                 user.first_name = first_name
                 changed = True
             if username != user.username:  # username can become None (user removed it)

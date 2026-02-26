@@ -261,6 +261,71 @@ async def admin_delete_user(telegram_id: int, request: Request):
         return JSONResponse({"error": "delete failed"}, status_code=500)
 
 
+@app.get("/admin/users/{telegram_id}/transactions")
+async def admin_user_transactions(telegram_id: int, request: Request):
+    """Return profile + last 50 transactions for a specific user. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        async with async_session() as session:
+            from app.database.repositories.user import UserRepository
+            from app.database.repositories.transaction import TransactionRepository
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_telegram_id(telegram_id)
+            if not user:
+                return JSONResponse({"error": "User not found"}, status_code=404)
+
+            txn_repo = TransactionRepository(session)
+            txns = await txn_repo.get_by_user(user.id)
+            txns = txns[:50]  # cap at 50
+
+        return JSONResponse({
+            "user": {
+                "id": user.id,
+                "telegram_id": user.telegram_id,
+                "first_name": user.first_name or "",
+                "username": user.username or "",
+                "phone_number": user.phone_number or "",
+                "created_at": user.created_at.isoformat() if user.created_at else "",
+            },
+            "transactions": [
+                {
+                    "id": t.id,
+                    "type": t.type,
+                    "amount": float(t.amount),
+                    "currency": t.currency,
+                    "category": t.category,
+                    "description": t.description or "",
+                    "created_at": t.created_at.isoformat() if t.created_at else "",
+                }
+                for t in txns
+            ],
+        })
+    except Exception as e:
+        logger.error(f"Admin user transactions error: {e}", exc_info=True)
+        return JSONResponse({"error": "unavailable"}, status_code=500)
+
+
+@app.post("/admin/users/{telegram_id}/message")
+async def admin_message_user(telegram_id: int, request: Request):
+    """Send a direct Telegram message to a single user. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return JSONResponse({"error": "text required"}, status_code=400)
+    if len(text) > 4096:
+        return JSONResponse({"error": "message too long (max 4096 chars)"}, status_code=400)
+    try:
+        await bot.send_message(chat_id=telegram_id, text=text, parse_mode="HTML")
+        logger.info(f"Admin sent direct message to user {telegram_id}")
+        return JSONResponse({"sent": True})
+    except Exception as e:
+        logger.error(f"Admin direct message error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post(settings.WEBHOOK_PATH)
 async def webhook(request: Request):
     """Receive Telegram updates via webhook."""
