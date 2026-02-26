@@ -7,8 +7,10 @@ Returning users → short welcome back + main keyboard.
 import asyncio
 from aiogram import Router, F
 from aiogram.types import (
-    Message, ReplyKeyboardMarkup, KeyboardButton,
+    Message, CallbackQuery,
+    ReplyKeyboardMarkup, KeyboardButton,
     ReplyKeyboardRemove,
+    InlineKeyboardMarkup, InlineKeyboardButton,
 )
 from aiogram.enums import ButtonStyle
 from aiogram.filters import Command, CommandStart
@@ -78,18 +80,17 @@ WALKTHROUGH = [
         '   📌 _"1200 dollar oylik oldim"_ → USD kirim\n\n'
         "🎤 Va ovozli xabar ham yuborishingiz mumkin!"
     ),
-    # Step 3: Commands
+    # Step 3: Keyboard buttons guide (no slash commands — bot uses keyboard)
     (
-        "📝 *Asosiy buyruqlar:*\n\n"
-        "/balans — 💰 Umumiy balans\n"
-        "/bugun — 📊 Bugungi operatsiyalar\n"
-        "/hafta — 📅 Haftalik hisobot\n"
-        "/oy — 📅 Oylik hisobot\n"
-        "/hisobot — 📋 To'liq hisobot\n"
-        "/tarix — ✏️ Tahrirlash va o'chirish\n"
-        "/bekor — ↩️ Oxirgi operatsiyani bekor qilish\n"
-        "/export — 📤 CSV fayl eksport\n"
-        "/yordam — ❓ Yordam"
+        "⌨️ *Pastdagi tugmalar bilan boshqaring:*\n\n"
+        "💰 *Balans* — umumiy kirim va chiqim balansi\n"
+        "📊 *Hisobot* — to'liq moliyaviy hisobot\n"
+        "📅 *Bugun* — bugungi operatsiyalar\n"
+        "📅 *Hafta* — so'nggi 7 kunlik hisobot\n"
+        "✏️ *Tarix* — so'nggi operatsiyalarni ko'rish, tahrirlash yoki o'chirish\n"
+        "📤 *Export* — bu oydagi ma'lumotlarni CSV fayl sifatida yuklash\n"
+        "❓ *Yordam* — qo'llanma va misollar\n"
+        "🤝 *Tavsiya* — do'stlarga ulashish"
     ),
     # Step 4: Category showcase
     (
@@ -175,6 +176,9 @@ async def onboarding_name(message: Message, state: FSMContext):
         async with async_session() as session:
             user_repo = UserRepository(session)
             await user_repo.update_name(message.from_user.id, name)
+
+        # Store name in FSM so later callback handlers can access it
+        await state.update_data(user_first_name=name)
 
         await message.answer(
             f"✅ *Xush kelibsiz, {name}!* 🎉",
@@ -281,32 +285,35 @@ async def onboarding_contact_text_fallback(message: Message, state: FSMContext):
 # ── Step 3: Feature walkthrough ──────────────────────────────
 
 async def _send_walkthrough_step(message: Message, state: FSMContext, idx: int):
-    """Send a walkthrough message and the 'Keyingi' button."""
+    """Send a walkthrough message with inline navigation buttons inside the bubble."""
     if idx >= len(WALKTHROUGH):
-        # Walkthrough complete!
         await _finish_onboarding(message, state)
         return
 
-    # Navigation buttons
+    # Build inline navigation buttons
     if idx < len(WALKTHROUGH) - 1:
-        # More steps to go
-        nav_kb = ReplyKeyboardMarkup(
-            keyboard=[[
-                KeyboardButton(text="➡️ Keyingi", style=ButtonStyle.PRIMARY),
-                KeyboardButton(text="⏭ Tugatish", style=ButtonStyle.SUCCESS),
-            ]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
+        # Not the last step
+        nav_kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="➡️ Keyingi",
+                callback_data="walk_next",
+                style=ButtonStyle.PRIMARY,
+            ),
+            InlineKeyboardButton(
+                text="⏭ O'tkazib yuborish",
+                callback_data="walk_skip",
+                style=ButtonStyle.DANGER,
+            ),
+        ]])
     else:
-        # Last step
-        nav_kb = ReplyKeyboardMarkup(
-            keyboard=[[
-                KeyboardButton(text="🚀 Boshlash!", style=ButtonStyle.SUCCESS),
-            ]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
+        # Last step — only a green Start button
+        nav_kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="🚀 Boshlash!",
+                callback_data="walk_skip",
+                style=ButtonStyle.SUCCESS,
+            ),
+        ]])
 
     step_label = f"_{idx + 1}/{len(WALKTHROUGH)}_"
     await message.answer(
@@ -316,25 +323,37 @@ async def _send_walkthrough_step(message: Message, state: FSMContext, idx: int):
     )
 
 
-@router.message(Onboarding.walkthrough_step, F.text == "➡️ Keyingi")
-async def walkthrough_next(message: Message, state: FSMContext):
+@router.callback_query(Onboarding.walkthrough_step, F.data == "walk_next")
+async def walkthrough_next(callback: CallbackQuery, state: FSMContext):
     """Advance to the next walkthrough step."""
+    await callback.answer()
     data = await state.get_data()
     idx = data.get("walkthrough_idx", 0) + 1
     await state.update_data(walkthrough_idx=idx)
-    await _send_walkthrough_step(message, state, idx)
+    await _send_walkthrough_step(callback.message, state, idx)
 
 
-@router.message(Onboarding.walkthrough_step, F.text.in_({"⏭ Tugatish", "🚀 Boshlash!"}))
-async def walkthrough_finish(message: Message, state: FSMContext):
-    """Skip remaining walkthrough or finish."""
-    await _finish_onboarding(message, state)
+@router.callback_query(Onboarding.walkthrough_step, F.data == "walk_skip")
+async def walkthrough_finish(callback: CallbackQuery, state: FSMContext):
+    """Skip remaining walkthrough or finish last step."""
+    await callback.answer()
+    await _finish_onboarding(callback.message, state)
 
 
 async def _finish_onboarding(message: Message, state: FSMContext):
     """Show demo invite after walkthrough is done."""
-    name = message.from_user.first_name or "do'stim"
+    # Get name from FSM data — message.from_user may be the bot when called from a callback
+    data = await state.get_data()
+    name = data.get("user_first_name") or message.from_user.first_name or "do'stim"
     await state.set_state(Onboarding.demo_mode)
+
+    demo_kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="⏭ O'tkazib yuborish",
+            callback_data="demo_skip",
+            style=ButtonStyle.DANGER,
+        ),
+    ]])
 
     await message.answer(
         f"🎉 *Ajoyib, {name}! Siz tayyor!*\n\n"
@@ -344,15 +363,16 @@ async def _finish_onboarding(message: Message, state: FSMContext):
         "⚠️ *Bu faqat sinov — hech narsa saqlanmaydi!*\n"
         "Natijani ko'rsataman, keyin asosiy rejimga o'tamiz. 👇",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=demo_kb,
     )
-    logger.info(f"User {message.from_user.id} entered demo mode")
+    logger.info(f"User entered demo mode")
 
 
 async def _show_main_keyboard(message: Message, state: FSMContext):
     """Clear FSM and show main keyboard — onboarding complete."""
+    data = await state.get_data()
+    name = data.get("user_first_name") or message.from_user.first_name or "do'stim"
     await state.clear()
-    name = message.from_user.first_name or "do'stim"
     await message.answer(
         f"🚀 *Zo'r, {name}! Endi asosiy rejimga o'tamiz.*\n\n"
         "Endi istalgan vaqt ovozli yoki matnli xabar yuboring — "
@@ -360,7 +380,14 @@ async def _show_main_keyboard(message: Message, state: FSMContext):
         parse_mode="Markdown",
         reply_markup=MAIN_KEYBOARD,
     )
-    logger.info(f"User {message.from_user.id} completed full onboarding")
+    logger.info("User completed full onboarding")
+
+
+@router.callback_query(Onboarding.demo_mode, F.data == "demo_skip")
+async def demo_skip(callback: CallbackQuery, state: FSMContext):
+    """Skip demo mode from the inline button."""
+    await callback.answer()
+    await _show_main_keyboard(callback.message, state)
 
 
 # ── Demo mode: parse but do NOT save ─────────────────────────────

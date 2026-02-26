@@ -1,0 +1,58 @@
+[debug] [2026-02-26T10:24:43.653Z] ----------------------------------------------------------------------
+[debug] [2026-02-26T10:24:43.657Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Kholmurod\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only hosting --project xisobchi-dashboard
+[debug] [2026-02-26T10:24:43.658Z] CLI Version:   14.26.0
+[debug] [2026-02-26T10:24:43.658Z] Platform:      win32
+[debug] [2026-02-26T10:24:43.658Z] Node Version:  v24.11.0
+[debug] [2026-02-26T10:24:43.658Z] Time:          Thu Feb 26 2026 15:24:43 GMT+0500 (Uzbekistan Standard Time)
+[debug] [2026-02-26T10:24:43.659Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-26T10:24:43.663Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-02-26T10:24:44.116Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-26T10:24:44.117Z] > authorizing via signed-in user (holmurod96@gmail.com)
+[debug] [2026-02-26T10:24:44.117Z] [iam] checking project xisobchi-dashboard for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-02-26T10:24:44.118Z] Checked if tokens are valid: false, expires at: 1771699077263
+[debug] [2026-02-26T10:24:44.119Z] Checked if tokens are valid: false, expires at: 1771699077263
+[debug] [2026-02-26T10:24:44.119Z] > refreshing access token with scopes: []
+[debug] [2026-02-26T10:24:44.121Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-02-26T10:24:44.121Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-26T10:24:44.519Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-02-26T10:24:44.520Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-26T10:24:44.537Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/xisobchi-dashboard:testIamPermissions [none]
+[debug] [2026-02-26T10:24:44.538Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/xisobchi-dashboard:testIamPermissions x-goog-quota-user=projects/xisobchi-dashboard
+[debug] [2026-02-26T10:24:44.538Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/xisobchi-dashboard:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-02-26T10:24:44.658Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-02-26T10:24:44.658Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-02-26T10:24:45.621Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/xisobchi-dashboard:testIamPermissions 200
+[debug] [2026-02-26T10:24:45.622Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/xisobchi-dashboard:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-02-26T10:24:45.624Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:45.625Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:45.626Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/xisobchi-dashboard [none]
+[debug] [2026-02-26T10:24:46.888Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/xisobchi-dashboard 200
+[debug] [2026-02-26T10:24:46.888Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/xisobchi-dashboard {"projectId":"xisobchi-dashboard","projectNumber":"1039281194387","displayName":"Xisobchi Dashboard","name":"projects/xisobchi-dashboard","resources":{"hostingSite":"xisobchi-dashboard"},"state":"ACTIVE","etag":"1_51eb211e-cd87-40c6-ae84-4fde587f3c1c"}
+[info] 
+[info] === Deploying to 'xisobchi-dashboard'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-02-26T10:24:46.919Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:46.920Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:46.920Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/xisobchi-dashboard/versions [none]
+[debug] [2026-02-26T10:24:46.920Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/xisobchi-dashboard/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-02-26T10:24:49.154Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/xisobchi-dashboard/versions 200
+[debug] [2026-02-26T10:24:49.155Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/xisobchi-dashboard/versions {"name":"projects/1039281194387/sites/xisobchi-dashboard/versions/0efc380fae833b47","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[xisobchi-dashboard]: beginning deploy... 
+[info] i  hosting[xisobchi-dashboard]: found 1 files in docs 
+[debug] [2026-02-26T10:24:49.212Z] [hosting] uploading with 200 concurrency
+[debug] [2026-02-26T10:24:49.221Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:49.221Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:49.223Z] [hosting] hash cache [ZG9jcw] stored for 1 files
+[debug] [2026-02-26T10:24:49.224Z] [hosting][hash queue][FINAL] {"max":6,"min":6,"avg":6,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":9}
+[debug] [2026-02-26T10:24:49.225Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/1039281194387/sites/xisobchi-dashboard/versions/0efc380fae833b47:populateFiles [none]
+[debug] [2026-02-26T10:24:49.225Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1039281194387/sites/xisobchi-dashboard/versions/0efc380fae833b47:populateFiles {"files":{"/index.html":"bb0e005cd8d28881691f386868dd7415cba94e12d63e534e02a635cb47a5b31c"}}
+[debug] [2026-02-26T10:24:50.279Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/1039281194387/sites/xisobchi-dashboard/versions/0efc380fae833b47:populateFiles 200
+[debug] [2026-02-26T10:24:50.279Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1039281194387/sites/xisobchi-dashboard/versions/0efc380fae833b47:populateFiles {"uploadRequiredHashes":["bb0e005cd8d28881691f386868dd7415cba94e12d63e534e02a635cb47a5b31c"],"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/xisobchi-dashboard/versions/0efc380fae833b47/files"}
+[debug] [2026-02-26T10:24:50.280Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:50.280Z] Checked if tokens are valid: true, expires at: 1772105083520
+[debug] [2026-02-26T10:24:50.281Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/xisobchi-dashboard/versions/0efc380fae833b47/files/bb0e005cd8d28881691f386868dd7415cba94e12d63e534e02a635cb47a5b31c [none]
+[debug] [2026-02-26T10:24:50.281Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/xisobchi-dashboard/versions/0efc380fae833b47/files/bb0e005cd8d28881691f386868dd7415cba94e12d63e534e02a635cb47a5b31c [stream]
+[debug] [2026-02-26T10:24:50.283Z] [hosting][populate queue][FINAL] {"max":1060,"min":1060,"avg":1060,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":1062}
+[debug] [2026-02-26T10:24:50.284Z] [hosting] uploads queued: 1
