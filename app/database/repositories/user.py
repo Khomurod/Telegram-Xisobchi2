@@ -16,6 +16,7 @@ class UserRepository(BaseRepository):
         user = User(
             telegram_id=telegram_id,
             first_name=first_name,
+            telegram_first_name=first_name,  # Initially same as Telegram name
             username=username,
         )
         self.session.add(user)
@@ -33,6 +34,10 @@ class UserRepository(BaseRepository):
             # Once the user types their own name during onboarding, never overwrite it.
             if first_name and user.first_name is None:
                 user.first_name = first_name
+                changed = True
+            # Always keep Telegram profile name up-to-date
+            if first_name and first_name != user.telegram_first_name:
+                user.telegram_first_name = first_name
                 changed = True
             if username != user.username:  # username can become None (user removed it)
                 user.username = username

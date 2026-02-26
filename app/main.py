@@ -170,6 +170,7 @@ async def admin_users(request: Request, page: int = 1, limit: int = 20):
                 "id": u.id,
                 "telegram_id": u.telegram_id,
                 "first_name": u.first_name or "",
+                "telegram_first_name": u.telegram_first_name or "",
                 "username": u.username or "",
                 "created_at": u.created_at.isoformat() if u.created_at else "",
             }

@@ -57,7 +57,7 @@ async function loadUsers(page = 1) {
     currentPage = page;
     const body = document.getElementById('users-body');
     const pages = document.getElementById('users-pages');
-    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted)">Yuklanmoqda…</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Yuklanmoqda…</td></tr>';
 
     try {
         const res = await fetch(`${API}/admin/users?page=${page}&limit=15`, {
@@ -73,6 +73,7 @@ async function loadUsers(page = 1) {
       <tr id="row-${u.telegram_id}" class="clickable-row" onclick="openUser(${u.telegram_id})">
         <td style="color:var(--muted)">${(page - 1) * d.limit + i + 1}</td>
         <td>${u.first_name || '—'}</td>
+        <td style="color:var(--muted);font-size:.85rem">${u.telegram_first_name || '—'}</td>
         <td>${u.username ? '@' + u.username : '—'}</td>
         <td style="font-family:monospace;font-size:.78rem">${u.telegram_id}</td>
         <td style="color:var(--muted)">${u.created_at ? new Date(u.created_at).toLocaleDateString('uz') : '—'}</td>
@@ -92,7 +93,7 @@ async function loadUsers(page = 1) {
         pages.innerHTML = phtml;
 
     } catch (e) {
-        body.innerHTML = `<tr><td colspan="6" style="color:var(--expense)">Xatolik: ${e.message}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="7" style="color:var(--expense)">Xatolik: ${e.message}</td></tr>`;
     }
 }
 

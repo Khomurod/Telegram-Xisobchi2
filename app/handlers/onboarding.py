@@ -127,7 +127,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
         if is_returning:
             # ── Returning user: short welcome ──
-            name = message.from_user.first_name or "do'stim"
+            name = user.first_name or message.from_user.first_name or "do'stim"
             await message.answer(
                 f"👋 *Qaytganingiz bilan, {name}!*\n\n"
                 "Tayyor! Ovozli yoki matnli xabar yuboring — "
