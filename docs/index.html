@@ -547,6 +547,7 @@
               <th>Username</th>
               <th>Telegram ID</th>
               <th>Ro'yxatdan o'tgan</th>
+              <th>Amal</th>
             </tr>
           </thead>
           <tbody id="users-body"></tbody>
@@ -694,19 +695,20 @@
       currentPage = page;
       const body = document.getElementById('users-body');
       const pages = document.getElementById('users-pages');
-      body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Yuklanmoqda…</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted)">Yuklanmoqda…</td></tr>';
       try {
         const res = await fetch(API + '/admin/users?page=' + page + '&limit=15', { headers: { 'X-Admin-Token': adminToken } });
         if (!res.ok) throw new Error('Server: ' + res.status);
         const d = await res.json();
         if (!d.users) throw new Error('Kutilmagan javob formati');
         const totalPages = Math.ceil(d.total / d.limit) || 1;
-        body.innerHTML = d.users.map((u, i) => `<tr>
+        body.innerHTML = d.users.map((u, i) => `<tr id="row-${u.telegram_id}">
       <td style="color:var(--muted)">${(page - 1) * d.limit + i + 1}</td>
       <td>${u.first_name || '—'}</td>
       <td>${u.username ? '@' + u.username : '—'}</td>
       <td style="font-family:monospace;font-size:.78rem">${u.telegram_id}</td>
       <td style="color:var(--muted)">${u.created_at ? new Date(u.created_at).toLocaleDateString('uz') : '—'}</td>
+      <td><button class="btn btn-danger btn-small" onclick="deleteUser(${u.telegram_id}, '${(u.first_name || u.telegram_id).replace(/'/g, '')}')" title="O'chirish">🗑</button></td>
     </tr>`).join('');
         document.getElementById('bc-count').textContent = `Jami ${d.total} ta foydalanuvchi`;
         let phtml = '';
@@ -714,7 +716,28 @@
         phtml += `<span>${page} / ${totalPages}</span>`;
         if (page < totalPages) phtml += `<button class="btn btn-primary btn-small" onclick="loadUsers(${page + 1})">Keyingi →</button>`;
         pages.innerHTML = phtml;
-      } catch (e) { body.innerHTML = `<tr><td colspan="5" style="color:var(--expense)">Xatolik: ${e.message}</td></tr>`; }
+      } catch (e) { body.innerHTML = `<tr><td colspan="6" style="color:var(--expense)">Xatolik: ${e.message}</td></tr>`; }
+    }
+
+    async function deleteUser(telegramId, displayName) {
+      if (!confirm(`"${displayName}" foydalanuvchisini o'chirishni tasdiqlaysizmi?\n\nBarcha ma'lumotlari (tranzaksiyalar) ham o'chiriladi. Bu amalni qaytarib bo'lmaydi!`)) return;
+      try {
+        const res = await fetch(API + '/admin/users/' + telegramId, {
+          method: 'DELETE',
+          headers: { 'X-Admin-Token': adminToken }
+        });
+        const d = await res.json();
+        if (!res.ok) { alert('Xatolik: ' + (d.error || res.status)); return; }
+        // Remove row from table without full reload
+        const row = document.getElementById('row-' + telegramId);
+        if (row) row.remove();
+        // Update bc-count label
+        const countEl = document.getElementById('bc-count');
+        if (countEl) {
+          const m = countEl.textContent.match(/(\d+)/);
+          if (m) countEl.textContent = `Jami ${parseInt(m[1]) - 1} ta foydalanuvchi`;
+        }
+      } catch (e) { alert('Xatolik: ' + e.message); }
     }
 
     async function sendBroadcast() {

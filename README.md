@@ -9,7 +9,7 @@ Telegram bot that converts Uzbek voice and text messages into financial transact
 
 - 🎤 **Voice Input** — Send voice messages in Uzbek to record transactions
 - ⌨️ **Text Input** — Type transactions directly (e.g. "Ovqatga 50 ming so'm")
-- 🧠 **Google Cloud STT** — Speech-to-Text with Uzbek + Russian support
+- 🧠 **Yandex SpeechKit** — Speech-to-Text with Uzbek + Russian support
 - 📊 **Smart Parsing** — Rule-based NLP understands Uzbek financial phrases
 - 💰 **Multi-Currency** — Income/expense tracking in UZS and USD
 - 📈 **Reports** — Daily, weekly, monthly, and full financial reports
@@ -78,10 +78,12 @@ The bot runs on Render in webhook mode. Deploys automatically from GitHub.
 |----------|-------------|
 | `BOT_TOKEN` | Telegram bot token from @BotFather |
 | `WEBHOOK_URL` | Your Render URL (e.g. `https://telegram-xisobchi2.onrender.com`) |
+| `WEBHOOK_SECRET` | Fixed random secret for Telegram webhook validation |
 | `MODE` | `webhook` |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `GOOGLE_CREDENTIALS_JSON` | Full contents of `credentials.json` |
+| `DATABASE_URL` | PostgreSQL connection string (Neon) |
+| `YANDEX_API_KEY` | Yandex SpeechKit API key (active STT provider) |
 | `ADMIN_SECRET` | Token for admin panel access |
+| `DASHBOARD_ORIGIN` | *(Optional)* Extra allowed CORS origin for the dashboard |
 
 ### Frontend Dashboard (Firebase Hosting)
 ```bash
@@ -90,6 +92,12 @@ npx -y firebase-tools deploy --only hosting --project xisobchi-dashboard
 
 ### Keep-Alive (Koyeb)
 A pinger service on Koyeb prevents Render from sleeping by hitting the health endpoint every 14 minutes.
+
+> [!IMPORTANT]
+> **Action required — set `WEBHOOK_SECRET` in Render.**
+> The bot generates a random webhook secret on every restart if this variable is missing, which causes Telegram to reject all incoming updates until the next deploy.
+> Fix: run `python -c "import secrets; print(secrets.token_hex(32))"` locally and add the output as a `WEBHOOK_SECRET` env var in your Render service settings.
+
 
 ## Project Structure
 
@@ -105,7 +113,7 @@ A pinger service on Koyeb prevents Render from sleeping by hitting the health en
 │   │   ├── models.py          # User, Transaction models
 │   │   └── repositories/      # Repository pattern (User, Transaction)
 │   ├── services/
-│   │   ├── speech_service.py  # Google Cloud STT + audio conversion
+│   │   ├── speech_service.py  # STT: Yandex SpeechKit (active) — Google & OpenAI Whisper available
 │   │   ├── parser.py          # Uzbek NLP transaction parser
 │   │   ├── transaction.py     # Business logic layer
 │   │   └── report.py          # Formatted report generation
@@ -123,8 +131,7 @@ A pinger service on Koyeb prevents Render from sleeping by hitting the health en
 ├── migrations/                # Alembic database migrations
 ├── run.py                     # Entry point (webhook / polling / pinger)
 ├── Dockerfile                 # Container image
-├── firebase.json              # Firebase Hosting config
-└── railway.json               # Railway deployment config
+└── firebase.json              # Firebase Hosting config
 ```
 
 ## Architecture
@@ -135,7 +142,7 @@ Telegram User
   ▼
 aiogram Handlers (FSM states for onboarding)
   │
-  ├── Voice ──► Google Cloud STT ──► Uzbek Parser ──► Confirmation ──► Save
+  ├── Voice ──► Yandex SpeechKit ──► Uzbek Parser ──► Confirmation ──► Save
   │
   ├── Text  ──► Uzbek Parser ──► Confirmation ──► Save
   │
@@ -156,7 +163,7 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 |-------|-----------|
 | Bot Framework | aiogram 3.25 |
 | Web Framework | FastAPI + uvicorn |
-| Speech-to-Text | Google Cloud Speech-to-Text |
+| Speech-to-Text | Yandex SpeechKit |
 | Database | PostgreSQL (Neon) via SQLAlchemy async |
 | Migrations | Alembic |
 | NLP | Rule-based Uzbek/Russian parser |

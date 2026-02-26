@@ -76,7 +76,7 @@ app = FastAPI(title="Xisobchi Bot", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        os.getenv("DASHBOARD_ORIGIN", "https://truckerapp-system.web.app"),
+        os.getenv("DASHBOARD_ORIGIN", "https://xisobchi-dashboard.web.app"),
         "https://xisobchi-dashboard.web.app",
         "https://xisobchi-dashboard.firebaseapp.com",
     ],
@@ -236,6 +236,30 @@ async def admin_daily_stats(request: Request):
     except Exception as e:
         logger.error(f"Daily stats error: {e}", exc_info=True)
         return JSONResponse({"error": "unavailable"}, status_code=500)
+
+
+@app.delete("/admin/users/{telegram_id}")
+async def admin_delete_user(telegram_id: int, request: Request):
+    """Hard-delete a user and ALL their transactions. Protected by X-Admin-Token.
+    After deletion the user can /start again and will go through onboarding from scratch.
+    """
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        async with async_session() as session:
+            from app.database.repositories.user import UserRepository
+            user_repo = UserRepository(session)
+            deleted = await user_repo.delete_by_telegram_id(telegram_id)
+
+        if not deleted:
+            return JSONResponse({"error": "User not found"}, status_code=404)
+
+        logger.info(f"Admin hard-deleted user telegram_id={telegram_id} with all their transactions")
+        return JSONResponse({"deleted": True, "telegram_id": telegram_id})
+    except Exception as e:
+        logger.error(f"Admin delete user error: {e}", exc_info=True)
+        return JSONResponse({"error": "delete failed"}, status_code=500)
+
 
 @app.post(settings.WEBHOOK_PATH)
 async def webhook(request: Request):

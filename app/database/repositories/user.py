@@ -59,3 +59,14 @@ class UserRepository(BaseRepository):
         """Return total number of registered users."""
         result = await self.session.execute(select(func.count(User.id)))
         return result.scalar() or 0
+
+    async def delete_by_telegram_id(self, telegram_id: int) -> bool:
+        """Hard-delete a user and all their transactions (cascade).
+        Returns True if the user existed and was deleted, False if not found.
+        """
+        user = await self.get_by_telegram_id(telegram_id)
+        if not user:
+            return False
+        await self.session.delete(user)
+        await self.session.commit()
+        return True

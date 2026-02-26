@@ -25,7 +25,7 @@ class User(Base):
     phone_number = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_uzt)
 
-    transactions = relationship("Transaction", back_populates="user", lazy="selectin")
+    transactions = relationship("Transaction", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(id={self.id}, telegram_id={self.telegram_id})>"
