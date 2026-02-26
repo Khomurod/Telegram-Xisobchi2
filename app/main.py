@@ -80,7 +80,7 @@ app.add_middleware(
         "https://xisobchi-dashboard.web.app",
         "https://xisobchi-dashboard.firebaseapp.com",
     ],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
