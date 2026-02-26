@@ -9,13 +9,11 @@ Designed for future auto-notification support:
   - User city is stored persistently
   - get_fasting_times() returns all data needed for scheduled notifications
 """
-import asyncio
 from aiogram import Router, F
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
-from aiogram.enums import ButtonStyle
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
@@ -37,23 +35,23 @@ class RamadanSetup(StatesGroup):
 # ── Standard Ramadan Duas ────────────────────────────────────
 
 SAHARLIK_DUA = (
-    "📿 *Saharlik (ro'za tutish) duosi:*\n\n"
-    '_"Navaytu an asuma savma shahri'
-    " Ramadona minal fajri ilal mag'ribi,"
-    ' xolisan lillahi ta\'ala"_\n\n'
-    "📖 _Ma'nosi: Ramazon oyining ro'zasini "
+    "📿 *Saharlik (ro\u2019za tutish) duosi:*\n\n"
+    "\"Navaytu an asuma savma shahri "
+    "Ramadona minal fajri ilal mag\u2019ribi, "
+    "xolisan lillahi ta\u2019ala\"\n\n"
+    "📖 Ma\u2019nosi: Ramazon oyining ro\u2019zasini "
     "subhdan to kechgacha tutmoqni niyat qildim, "
-    "xolis Alloh taolo uchun._"
+    "xolis Alloh taolo uchun."
 )
 
 IFTORLIK_DUA = (
-    "📿 *Iftorlik (ro'za ochish) duosi:*\n\n"
-    '_"Allohumma laka sumtu va bika amantu'
-    " va 'alayka tavakkaltu"
-    ' va \'ala rizqika aftartu"_\n\n'
-    "📖 _Ma'nosi: Ey Alloh, Sen uchun ro'za tutdim, "
+    "📿 *Iftorlik (ro\u2019za ochish) duosi:*\n\n"
+    "\"Allohumma laka sumtu va bika amantu "
+    "va \u2019alayka tavakkaltu "
+    "va \u2019ala rizqika aftartu\"\n\n"
+    "📖 Ma\u2019nosi: Ey Alloh, Sen uchun ro\u2019za tutdim, "
     "Senga iymon keltirdim, Senga tavakkal qildim "
-    "va bergan rizqing bilan iftor qildim._"
+    "va bergan rizqing bilan iftor qildim."
 )
 
 
@@ -195,12 +193,10 @@ async def _show_fasting_times(message: Message, city_key: str):
             InlineKeyboardButton(
                 text="📿 Duolar",
                 callback_data="ram_duas",
-                style=ButtonStyle.SUCCESS,
             ),
             InlineKeyboardButton(
                 text="🏙 Shaharni o'zgartirish",
                 callback_data="ram_changecity",
-                style=ButtonStyle.PRIMARY,
             ),
         ],
     ])

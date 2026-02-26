@@ -2,7 +2,7 @@
 Shared constants used across the application.
 Centralizes timezone, category names, and emoji mappings.
 """
-from datetime import timezone, timedelta
+from datetime import timezone, timedelta, date
 
 # Uzbekistan timezone (UTC+5)
 UZT = timezone(timedelta(hours=5))
@@ -44,7 +44,6 @@ def uzbek_month_year(dt) -> str:
 
 
 # ── Uzbekistan cities (for Ramadan feature — Aladhan API) ────
-from datetime import date
 
 UZBEKISTAN_CITIES = {
     "Tashkent": "Toshkent",
