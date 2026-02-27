@@ -1,0 +1,76 @@
+### https://core.telegram.org/bots/api#available-typesAvailable types
+
+#### https://core.telegram.org/bots/api#businessintroBusinessIntro
+Contains information about the start page settings of a Telegram Business account.
+[Sticker](https://core.telegram.org/bots/api#sticker)
+
+#### https://core.telegram.org/bots/api#businesslocationBusinessLocation
+Contains information about the location of a Telegram Business account.
+[Location](https://core.telegram.org/bots/api#location)
+
+#### https://core.telegram.org/bots/api#businessopeninghoursintervalBusinessOpeningHoursInterval
+Describes an interval of time during which a business is open.
+
+#### https://core.telegram.org/bots/api#businessopeninghoursBusinessOpeningHours
+Describes the opening hours of a business.
+[BusinessOpeningHoursInterval](https://core.telegram.org/bots/api#businessopeninghoursinterval)
+
+#### https://core.telegram.org/bots/api#userratingUserRating
+This object describes the rating of a user based on their Telegram Star spendings.
+
+#### https://core.telegram.org/bots/api#storyareapositionStoryAreaPosition
+Describes the position of a clickable area within a story.
+
+#### https://core.telegram.org/bots/api#locationaddressLocationAddress
+Describes the physical address of a location.
+
+#### https://core.telegram.org/bots/api#storyareatypeStoryAreaType
+Describes the type of a clickable area on a story. Currently, it can be one of
+- [StoryAreaTypeLocation](https://core.telegram.org/bots/api#storyareatypelocation)
+- [StoryAreaTypeSuggestedReaction](https://core.telegram.org/bots/api#storyareatypesuggestedreaction)
+- [StoryAreaTypeLink](https://core.telegram.org/bots/api#storyareatypelink)
+- [StoryAreaTypeWeather](https://core.telegram.org/bots/api#storyareatypeweather)
+- [StoryAreaTypeUniqueGift](https://core.telegram.org/bots/api#storyareatypeuniquegift)
+[StoryAreaTypeLocation](https://core.telegram.org/bots/api#storyareatypelocation)
+[StoryAreaTypeSuggestedReaction](https://core.telegram.org/bots/api#storyareatypesuggestedreaction)
+[StoryAreaTypeLink](https://core.telegram.org/bots/api#storyareatypelink)
+[StoryAreaTypeWeather](https://core.telegram.org/bots/api#storyareatypeweather)
+[StoryAreaTypeUniqueGift](https://core.telegram.org/bots/api#storyareatypeuniquegift)
+
+#### https://core.telegram.org/bots/api#storyareatypelocationStoryAreaTypeLocation
+Describes a story area pointing to a location. Currently, a story can have up to 10 location areas.
+[LocationAddress](https://core.telegram.org/bots/api#locationaddress)
+
+#### https://core.telegram.org/bots/api#storyareatypesuggestedreactionStoryAreaTypeSuggestedReaction
+Describes a story area pointing to a suggested reaction. Currently, a story can have up to 5 suggested reaction areas.
+[ReactionType](https://core.telegram.org/bots/api#reactiontype)
+
+#### https://core.telegram.org/bots/api#storyareatypelinkStoryAreaTypeLink
+Describes a story area pointing to an HTTP or tg:// link. Currently, a story can have up to 3 link areas.
+
+#### https://core.telegram.org/bots/api#storyareatypeweatherStoryAreaTypeWeather
+Describes a story area containing weather information. Currently, a story can have up to 3 weather areas.
+
+#### https://core.telegram.org/bots/api#storyareatypeuniquegiftStoryAreaTypeUniqueGift
+Describes a story area pointing to a unique gift. Currently, a story can have at most 1 unique gift area.
+
+#### https://core.telegram.org/bots/api#storyareaStoryArea
+Describes a clickable area on a story media.
+[StoryAreaPosition](https://core.telegram.org/bots/api#storyareaposition)
+[StoryAreaType](https://core.telegram.org/bots/api#storyareatype)
+
+#### https://core.telegram.org/bots/api#chatlocationChatLocation
+Represents a location to which a chat is connected.
+[Location](https://core.telegram.org/bots/api#location)
+
+#### https://core.telegram.org/bots/api#reactiontypeReactionType
+This object describes the type of a reaction. Currently, it can be one of
+- [ReactionTypeEmoji](https://core.telegram.org/bots/api#reactiontypeemoji)
+- [ReactionTypeCustomEmoji](https://core.telegram.org/bots/api#reactiontypecustomemoji)
+- [ReactionTypePaid](https://core.telegram.org/bots/api#reactiontypepaid)
+[ReactionTypeEmoji](https://core.telegram.org/bots/api#reactiontypeemoji)
+[ReactionTypeCustomEmoji](https://core.telegram.org/bots/api#reactiontypecustomemoji)
+[ReactionTypePaid](https://core.telegram.org/bots/api#reactiontypepaid)
+
+#### https://core.telegram.org/bots/api#reactiontypeemojiReactionTypeEmoji
+The reaction is based on an emoji.
