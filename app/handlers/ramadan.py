@@ -107,7 +107,10 @@ async def _show_city_picker(message: Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=rows)
     await message.answer(
         "🏙 *Shahringizni tanlang:*\n\n"
-        "Saharlik va Iftorlik vaqtlari shahringizga qarab farq qiladi.",
+        "Saharlik va Iftorlik vaqtlari shahringizga qarab farq qiladi.\n\n"
+        "📍 Agar shahringiz ro\u2019yxatda yo\u2019q bo\u2019lsa, "
+        "Fatvo Markazi rasmiy botidan foydalaning:\n"
+        "👉 @fatvouz\\_taqvim\\_bot",
         parse_mode="Markdown",
         reply_markup=kb,
     )

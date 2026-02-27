@@ -32,7 +32,7 @@ class FastingTimes:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Official Muftiyat timetables — keyed by (city, date) → (imsak, maghrib)
-# Ramadan 1447 AH: Feb 19 – Mar 20, 2026 (Tashkent start Feb 19, others Feb 18)
+# Ramadan 1447 AH: Feb 19 – Mar 20, 2026. All 14 cities start on Feb 19 (day 1).
 # ─────────────────────────────────────────────────────────────────────────────
 
 # fmt: off
@@ -502,23 +502,9 @@ _TIMES: dict[str, dict[date, tuple[str, str]]] = {
 }
 # fmt: on
 
-# Per-city Ramadan day 1 reference dates
-_RAMADAN_DAY1: dict[str, date] = {
-    "Tashkent":  date(2026, 2, 19),   # Kun 1 = Feb 19
-    "Samarkand": date(2026, 2, 18),   # Kun 2 = Feb 19 → day 1 = Feb 18
-    "Bukhara":   date(2026, 2, 18),
-    "Namangan":  date(2026, 2, 18),
-    "Andijan":   date(2026, 2, 18),
-    "Fergana":   date(2026, 2, 18),
-    "Nukus":     date(2026, 2, 18),
-    "Karshi":    date(2026, 2, 18),
-    "Urgench":   date(2026, 2, 18),
-    "Jizzakh":   date(2026, 2, 18),
-    "Navoi":     date(2026, 2, 18),
-    "Termez":    date(2026, 2, 18),
-    "Gulistan":  date(2026, 2, 18),
-    "Kokand":    date(2026, 2, 18),
-}
+# Per-city Ramadan day 1 reference date
+# All cities began fasting on Feb 19, 2026 (1 Ramazon 1447 AH)
+_RAMADAN_DAY1: dict[str, date] = {city: date(2026, 2, 19) for city in _TIMES}
 
 
 async def get_fasting_times(city: str = "Tashkent", target_date: Optional[date] = None) -> Optional[FastingTimes]:
@@ -548,7 +534,7 @@ async def get_fasting_times(city: str = "Tashkent", target_date: Optional[date] 
         return None
 
     imsak, maghrib = entry
-    day1 = _RAMADAN_DAY1.get(city, date(2026, 2, 18))
+    day1 = _RAMADAN_DAY1.get(city, date(2026, 2, 19))
     ramadan_day = (today - day1).days + 1
 
     logger.info(f"Serving hardcoded times for {city} / {today}: imsak={imsak} maghrib={maghrib}")
