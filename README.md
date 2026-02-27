@@ -199,6 +199,7 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 | 6 | 🟢 | FSM storage is in-memory (default MemoryStorage) | Low risk for short flows |
 | 7 | 🟢 | Health check doesn't ping database | Consider adding DB ping |
 | 8 | 🟢 | Admin token comparison is not timing-safe | Very low risk (internal API) |
+| 9 | 🟡 | Broadcast shows error **count** only — no details on which users failed | See Roadmap |
 
 ## Roadmap
 
@@ -208,6 +209,7 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 - [x] Edit & undo transactions
 - [x] Interactive onboarding with demo mode
 - [x] CSV export
+- [ ] **Broadcast failure details** — show exactly which users (name / username / Telegram ID) failed to receive the message (currently only the error count is shown)
 - [ ] Subscription system & premium features
 - [ ] PDF report export
 - [ ] Multi-currency exchange rates
