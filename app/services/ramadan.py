@@ -1,33 +1,19 @@
 """
-Ramadan service — fetches fasting times from Aladhan API.
+Ramadan service — official Uzbekistan Muftiyat fasting times (2026).
 
-Uses the free Aladhan API (no API key needed) to get daily
-Saharlik (Imsak) and Iftorlik (Maghrib) times for any Uzbekistan city.
+All Saharlik (Imsak) and Iftorlik (Maghrib) times are sourced directly
+from the official Uzbekistan Muftiyat timetable uploaded by the admin.
+No external API is used; times are 100% offline and accurate.
 
-Designed for future extensibility:
-  - get_fasting_times() returns all data needed for notifications
-  - City is passed as a parameter (stored per-user in DB)
-  - Cache is per-city to support multiple users in different cities
+City keys match the UZBEKISTAN_CITIES dict in app/constants.py.
 """
-import time
 from datetime import datetime, date
 from dataclasses import dataclass
 from typing import Optional
-import aiohttp
 from app.utils.logger import setup_logger
 from app.constants import UZT
 
 logger = setup_logger("ramadan")
-
-# Aladhan API — free, no key needed
-_ALADHAN_URL = "https://api.aladhan.com/v1/timingsByCity"
-
-# Method 3 = Muslim World League (standard for Central Asia / Uzbekistan)
-_CALCULATION_METHOD = 3
-
-# Cache: city_name → (data, timestamp)
-_cache: dict[str, tuple[dict, float]] = {}
-_CACHE_TTL = 6 * 3600  # 6 hours
 
 
 @dataclass
@@ -35,127 +21,566 @@ class FastingTimes:
     """Today's fasting times for a given city."""
     city: str
     imsak: str          # Saharlik end time (e.g. "05:37")
-    fajr: str           # Fajr prayer time
-    sunrise: str        # Sunrise time
-    maghrib: str        # Iftorlik time (= Maghrib)
-    ramadan_day: int    # Which day of Ramadan (1–30)
-    hijri_date: str     # Full Hijri date string
+    fajr: str           # Same as imsak (not in official table)
+    sunrise: str        # Not in official table — empty string
+    maghrib: str        # Iftorlik time
+    ramadan_day: int    # Which day of Ramadan (1-30)
+    hijri_date: str     # Hijri date string
     hijri_month: int    # Hijri month number (9 = Ramadan)
     hijri_year: str     # Hijri year
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Official Muftiyat timetables — keyed by (city, date) → (imsak, maghrib)
+# Ramadan 1447 AH: Feb 19 – Mar 20, 2026 (Tashkent start Feb 19, others Feb 18)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# fmt: off
+_TIMES: dict[str, dict[date, tuple[str, str]]] = {
+
+    "Tashkent": {
+        date(2026, 2, 19): ("05:54", "18:04"),
+        date(2026, 2, 20): ("05:53", "18:06"),
+        date(2026, 2, 21): ("05:51", "18:07"),
+        date(2026, 2, 22): ("05:50", "18:08"),
+        date(2026, 2, 23): ("05:48", "18:09"),
+        date(2026, 2, 24): ("05:47", "18:10"),
+        date(2026, 2, 25): ("05:46", "18:12"),
+        date(2026, 2, 26): ("05:44", "18:13"),
+        date(2026, 2, 27): ("05:43", "18:14"),
+        date(2026, 2, 28): ("05:41", "18:15"),
+        date(2026, 3,  1): ("05:40", "18:16"),
+        date(2026, 3,  2): ("05:38", "18:18"),
+        date(2026, 3,  3): ("05:37", "18:19"),
+        date(2026, 3,  4): ("05:35", "18:20"),
+        date(2026, 3,  5): ("05:33", "18:21"),
+        date(2026, 3,  6): ("05:32", "18:22"),
+        date(2026, 3,  7): ("05:30", "18:23"),
+        date(2026, 3,  8): ("05:29", "18:24"),
+        date(2026, 3,  9): ("05:27", "18:26"),
+        date(2026, 3, 10): ("05:25", "18:27"),
+        date(2026, 3, 11): ("05:24", "18:28"),
+        date(2026, 3, 12): ("05:22", "18:29"),
+        date(2026, 3, 13): ("05:20", "18:30"),
+        date(2026, 3, 14): ("05:19", "18:31"),
+        date(2026, 3, 15): ("05:17", "18:32"),
+        date(2026, 3, 16): ("05:15", "18:33"),
+        date(2026, 3, 17): ("05:13", "18:35"),
+        date(2026, 3, 18): ("05:12", "18:36"),
+        date(2026, 3, 19): ("05:10", "18:37"),
+        date(2026, 3, 20): ("05:08", "18:38"),
+    },
+
+    "Samarkand": {
+        date(2026, 2, 19): ("06:02", "18:16"),
+        date(2026, 2, 20): ("06:01", "18:16"),
+        date(2026, 2, 21): ("06:00", "18:18"),
+        date(2026, 2, 22): ("05:58", "18:19"),
+        date(2026, 2, 23): ("05:57", "18:20"),
+        date(2026, 2, 24): ("05:55", "18:21"),
+        date(2026, 2, 25): ("05:54", "18:22"),
+        date(2026, 2, 26): ("05:53", "18:24"),
+        date(2026, 2, 27): ("05:51", "18:25"),
+        date(2026, 2, 28): ("05:51", "18:26"),
+        date(2026, 3,  1): ("05:49", "18:27"),
+        date(2026, 3,  2): ("05:48", "18:28"),
+        date(2026, 3,  3): ("05:46", "18:29"),
+        date(2026, 3,  4): ("05:44", "18:31"),
+        date(2026, 3,  5): ("05:43", "18:32"),
+        date(2026, 3,  6): ("05:41", "18:33"),
+        date(2026, 3,  7): ("05:40", "18:34"),
+        date(2026, 3,  8): ("05:38", "18:35"),
+        date(2026, 3,  9): ("05:36", "18:36"),
+        date(2026, 3, 10): ("05:35", "18:36"),
+        date(2026, 3, 11): ("05:33", "18:38"),
+        date(2026, 3, 12): ("05:31", "18:39"),
+        date(2026, 3, 13): ("05:30", "18:40"),
+        date(2026, 3, 14): ("05:28", "18:41"),
+        date(2026, 3, 15): ("05:26", "18:42"),
+        date(2026, 3, 16): ("05:24", "18:43"),
+        date(2026, 3, 17): ("05:23", "18:44"),
+        date(2026, 3, 18): ("05:21", "18:45"),
+        date(2026, 3, 19): ("05:19", "18:46"),
+        date(2026, 3, 20): ("05:18", "18:48"),
+    },
+
+    "Bukhara": {
+        date(2026, 2, 19): ("06:12", "18:26"),
+        date(2026, 2, 20): ("06:11", "18:26"),
+        date(2026, 2, 21): ("06:10", "18:28"),
+        date(2026, 2, 22): ("06:08", "18:29"),
+        date(2026, 2, 23): ("06:07", "18:30"),
+        date(2026, 2, 24): ("06:05", "18:31"),
+        date(2026, 2, 25): ("06:04", "18:32"),
+        date(2026, 2, 26): ("06:03", "18:34"),
+        date(2026, 2, 27): ("06:01", "18:35"),
+        date(2026, 2, 28): ("06:01", "18:36"),
+        date(2026, 3,  1): ("05:59", "18:37"),
+        date(2026, 3,  2): ("05:58", "18:38"),
+        date(2026, 3,  3): ("05:56", "18:39"),
+        date(2026, 3,  4): ("05:54", "18:41"),
+        date(2026, 3,  5): ("05:53", "18:42"),
+        date(2026, 3,  6): ("05:51", "18:43"),
+        date(2026, 3,  7): ("05:50", "18:44"),
+        date(2026, 3,  8): ("05:48", "18:45"),
+        date(2026, 3,  9): ("05:46", "18:46"),
+        date(2026, 3, 10): ("05:45", "18:46"),
+        date(2026, 3, 11): ("05:43", "18:48"),
+        date(2026, 3, 12): ("05:41", "18:49"),
+        date(2026, 3, 13): ("05:40", "18:50"),
+        date(2026, 3, 14): ("05:38", "18:51"),
+        date(2026, 3, 15): ("05:36", "18:52"),
+        date(2026, 3, 16): ("05:34", "18:53"),
+        date(2026, 3, 17): ("05:33", "18:54"),
+        date(2026, 3, 18): ("05:31", "18:55"),
+        date(2026, 3, 19): ("05:29", "18:56"),
+        date(2026, 3, 20): ("05:28", "18:58"),
+    },
+
+    "Namangan": {
+        date(2026, 2, 19): ("05:44", "17:54"),
+        date(2026, 2, 20): ("05:43", "17:55"),
+        date(2026, 2, 21): ("05:42", "17:57"),
+        date(2026, 2, 22): ("05:40", "17:58"),
+        date(2026, 2, 23): ("05:39", "17:59"),
+        date(2026, 2, 24): ("05:37", "18:00"),
+        date(2026, 2, 25): ("05:36", "18:01"),
+        date(2026, 2, 26): ("05:35", "18:03"),
+        date(2026, 2, 27): ("05:33", "18:04"),
+        date(2026, 2, 28): ("05:32", "18:05"),
+        date(2026, 3,  1): ("05:30", "18:06"),
+        date(2026, 3,  2): ("05:29", "18:07"),
+        date(2026, 3,  3): ("05:27", "18:08"),
+        date(2026, 3,  4): ("05:25", "18:10"),
+        date(2026, 3,  5): ("05:24", "18:11"),
+        date(2026, 3,  6): ("05:22", "18:12"),
+        date(2026, 3,  7): ("05:21", "18:13"),
+        date(2026, 3,  8): ("05:19", "18:14"),
+        date(2026, 3,  9): ("05:17", "18:15"),
+        date(2026, 3, 10): ("05:16", "18:16"),
+        date(2026, 3, 11): ("05:14", "18:18"),
+        date(2026, 3, 12): ("05:12", "18:19"),
+        date(2026, 3, 13): ("05:11", "18:20"),
+        date(2026, 3, 14): ("05:09", "18:21"),
+        date(2026, 3, 15): ("05:07", "18:22"),
+        date(2026, 3, 16): ("05:05", "18:23"),
+        date(2026, 3, 17): ("05:04", "18:24"),
+        date(2026, 3, 18): ("05:02", "18:25"),
+        date(2026, 3, 19): ("05:00", "18:26"),
+        date(2026, 3, 20): ("04:58", "18:28"),
+    },
+
+    "Andijan": {
+        date(2026, 2, 19): ("05:41", "17:52"),
+        date(2026, 2, 20): ("05:41", "17:53"),
+        date(2026, 2, 21): ("05:40", "17:55"),
+        date(2026, 2, 22): ("05:38", "17:56"),
+        date(2026, 2, 23): ("05:37", "17:57"),
+        date(2026, 2, 24): ("05:35", "17:58"),
+        date(2026, 2, 25): ("05:34", "17:59"),
+        date(2026, 2, 26): ("05:33", "18:01"),
+        date(2026, 2, 27): ("05:31", "18:02"),
+        date(2026, 2, 28): ("05:30", "18:03"),
+        date(2026, 3,  1): ("05:28", "18:04"),
+        date(2026, 3,  2): ("05:27", "18:05"),
+        date(2026, 3,  3): ("05:25", "18:06"),
+        date(2026, 3,  4): ("05:23", "18:08"),
+        date(2026, 3,  5): ("05:22", "18:09"),
+        date(2026, 3,  6): ("05:20", "18:10"),
+        date(2026, 3,  7): ("05:19", "18:11"),
+        date(2026, 3,  8): ("05:17", "18:12"),
+        date(2026, 3,  9): ("05:15", "18:13"),
+        date(2026, 3, 10): ("05:14", "18:13"),
+        date(2026, 3, 11): ("05:12", "18:15"),
+        date(2026, 3, 12): ("05:10", "18:16"),
+        date(2026, 3, 13): ("05:09", "18:17"),
+        date(2026, 3, 14): ("05:07", "18:18"),
+        date(2026, 3, 15): ("05:05", "18:19"),
+        date(2026, 3, 16): ("05:03", "18:20"),
+        date(2026, 3, 17): ("05:02", "18:21"),
+        date(2026, 3, 18): ("05:00", "18:22"),
+        date(2026, 3, 19): ("04:58", "18:23"),
+        date(2026, 3, 20): ("04:56", "18:25"),
+    },
+
+    "Fergana": {
+        date(2026, 2, 19): ("05:44", "17:55"),
+        date(2026, 2, 20): ("05:43", "17:56"),
+        date(2026, 2, 21): ("05:42", "17:58"),
+        date(2026, 2, 22): ("05:40", "17:59"),
+        date(2026, 2, 23): ("05:39", "18:00"),
+        date(2026, 2, 24): ("05:37", "18:01"),
+        date(2026, 2, 25): ("05:36", "18:02"),
+        date(2026, 2, 26): ("05:35", "18:04"),
+        date(2026, 2, 27): ("05:33", "18:05"),
+        date(2026, 2, 28): ("05:32", "18:06"),
+        date(2026, 3,  1): ("05:30", "18:07"),
+        date(2026, 3,  2): ("05:29", "18:08"),
+        date(2026, 3,  3): ("05:27", "18:09"),
+        date(2026, 3,  4): ("05:25", "18:11"),
+        date(2026, 3,  5): ("05:24", "18:12"),
+        date(2026, 3,  6): ("05:22", "18:13"),
+        date(2026, 3,  7): ("05:21", "18:14"),
+        date(2026, 3,  8): ("05:19", "18:15"),
+        date(2026, 3,  9): ("05:17", "18:16"),
+        date(2026, 3, 10): ("05:16", "18:16"),
+        date(2026, 3, 11): ("05:14", "18:18"),
+        date(2026, 3, 12): ("05:12", "18:19"),
+        date(2026, 3, 13): ("05:11", "18:20"),
+        date(2026, 3, 14): ("05:09", "18:21"),
+        date(2026, 3, 15): ("05:07", "18:22"),
+        date(2026, 3, 16): ("05:05", "18:23"),
+        date(2026, 3, 17): ("05:04", "18:24"),
+        date(2026, 3, 18): ("05:02", "18:25"),
+        date(2026, 3, 19): ("05:00", "18:26"),
+        date(2026, 3, 20): ("04:58", "18:28"),
+    },
+
+    "Nukus": {
+        date(2026, 2, 19): ("06:34", "18:39"),
+        date(2026, 2, 20): ("06:32", "18:41"),
+        date(2026, 2, 21): ("06:31", "18:43"),
+        date(2026, 2, 22): ("06:29", "18:44"),
+        date(2026, 2, 23): ("06:28", "18:45"),
+        date(2026, 2, 24): ("06:26", "18:46"),
+        date(2026, 2, 25): ("06:25", "18:47"),
+        date(2026, 2, 26): ("06:24", "18:49"),
+        date(2026, 2, 27): ("06:22", "18:50"),
+        date(2026, 2, 28): ("06:21", "18:52"),
+        date(2026, 3,  1): ("06:19", "18:53"),
+        date(2026, 3,  2): ("06:18", "18:54"),
+        date(2026, 3,  3): ("06:16", "18:55"),
+        date(2026, 3,  4): ("06:14", "18:57"),
+        date(2026, 3,  5): ("06:13", "18:58"),
+        date(2026, 3,  6): ("06:11", "18:59"),
+        date(2026, 3,  7): ("06:10", "19:00"),
+        date(2026, 3,  8): ("06:08", "19:01"),
+        date(2026, 3,  9): ("06:06", "19:02"),
+        date(2026, 3, 10): ("06:04", "19:03"),
+        date(2026, 3, 11): ("06:02", "19:05"),
+        date(2026, 3, 12): ("06:00", "19:06"),
+        date(2026, 3, 13): ("05:59", "19:07"),
+        date(2026, 3, 14): ("05:57", "19:08"),
+        date(2026, 3, 15): ("05:55", "19:09"),
+        date(2026, 3, 16): ("05:53", "19:10"),
+        date(2026, 3, 17): ("05:52", "19:11"),
+        date(2026, 3, 18): ("05:50", "19:12"),
+        date(2026, 3, 19): ("05:48", "19:13"),
+        date(2026, 3, 20): ("05:45", "19:16"),
+    },
+
+    "Karshi": {
+        date(2026, 2, 19): ("06:06", "18:23"),
+        date(2026, 2, 20): ("06:05", "18:22"),
+        date(2026, 2, 21): ("06:04", "18:24"),
+        date(2026, 2, 22): ("06:02", "18:25"),
+        date(2026, 2, 23): ("06:01", "18:26"),
+        date(2026, 2, 24): ("05:59", "18:27"),
+        date(2026, 2, 25): ("05:58", "18:28"),
+        date(2026, 2, 26): ("05:57", "18:30"),
+        date(2026, 2, 27): ("05:55", "18:31"),
+        date(2026, 2, 28): ("05:55", "18:32"),
+        date(2026, 3,  1): ("05:53", "18:33"),
+        date(2026, 3,  2): ("05:52", "18:34"),
+        date(2026, 3,  3): ("05:50", "18:35"),
+        date(2026, 3,  4): ("05:48", "18:37"),
+        date(2026, 3,  5): ("05:47", "18:38"),
+        date(2026, 3,  6): ("05:45", "18:39"),
+        date(2026, 3,  7): ("05:44", "18:40"),
+        date(2026, 3,  8): ("05:42", "18:41"),
+        date(2026, 3,  9): ("05:40", "18:42"),
+        date(2026, 3, 10): ("05:40", "18:41"),
+        date(2026, 3, 11): ("05:38", "18:43"),
+        date(2026, 3, 12): ("05:36", "18:44"),
+        date(2026, 3, 13): ("05:35", "18:45"),
+        date(2026, 3, 14): ("05:33", "18:46"),
+        date(2026, 3, 15): ("05:31", "18:47"),
+        date(2026, 3, 16): ("05:29", "18:48"),
+        date(2026, 3, 17): ("05:28", "18:49"),
+        date(2026, 3, 18): ("05:26", "18:50"),
+        date(2026, 3, 19): ("05:24", "18:51"),
+        date(2026, 3, 20): ("05:23", "18:53"),
+    },
+
+    "Urgench": {
+        date(2026, 2, 19): ("06:31", "18:34"),
+        date(2026, 2, 20): ("06:29", "18:36"),
+        date(2026, 2, 21): ("06:28", "18:38"),
+        date(2026, 2, 22): ("06:26", "18:39"),
+        date(2026, 2, 23): ("06:25", "18:40"),
+        date(2026, 2, 24): ("06:23", "18:41"),
+        date(2026, 2, 25): ("06:22", "18:42"),
+        date(2026, 2, 26): ("06:21", "18:44"),
+        date(2026, 2, 27): ("06:19", "18:45"),
+        date(2026, 2, 28): ("06:17", "18:47"),
+        date(2026, 3,  1): ("06:15", "18:48"),
+        date(2026, 3,  2): ("06:14", "18:49"),
+        date(2026, 3,  3): ("06:12", "18:50"),
+        date(2026, 3,  4): ("06:10", "18:52"),
+        date(2026, 3,  5): ("06:09", "18:53"),
+        date(2026, 3,  6): ("06:07", "18:54"),
+        date(2026, 3,  7): ("06:06", "18:55"),
+        date(2026, 3,  8): ("06:04", "18:56"),
+        date(2026, 3,  9): ("06:02", "18:57"),
+        date(2026, 3, 10): ("06:00", "18:58"),
+        date(2026, 3, 11): ("05:58", "19:00"),
+        date(2026, 3, 12): ("05:56", "19:01"),
+        date(2026, 3, 13): ("05:55", "19:02"),
+        date(2026, 3, 14): ("05:53", "19:03"),
+        date(2026, 3, 15): ("05:51", "19:04"),
+        date(2026, 3, 16): ("05:49", "19:05"),
+        date(2026, 3, 17): ("05:48", "19:06"),
+        date(2026, 3, 18): ("05:46", "19:07"),
+        date(2026, 3, 19): ("05:44", "19:08"),
+        date(2026, 3, 20): ("05:41", "19:12"),
+    },
+
+    "Jizzakh": {
+        date(2026, 2, 19): ("05:59", "18:12"),
+        date(2026, 2, 20): ("05:58", "18:12"),
+        date(2026, 2, 21): ("05:57", "18:14"),
+        date(2026, 2, 22): ("05:55", "18:15"),
+        date(2026, 2, 23): ("05:54", "18:16"),
+        date(2026, 2, 24): ("05:52", "18:17"),
+        date(2026, 2, 25): ("05:51", "18:18"),
+        date(2026, 2, 26): ("05:50", "18:20"),
+        date(2026, 2, 27): ("05:48", "18:21"),
+        date(2026, 2, 28): ("05:47", "18:22"),
+        date(2026, 3,  1): ("05:45", "18:23"),
+        date(2026, 3,  2): ("05:44", "18:24"),
+        date(2026, 3,  3): ("05:42", "18:25"),
+        date(2026, 3,  4): ("05:40", "18:27"),
+        date(2026, 3,  5): ("05:39", "18:28"),
+        date(2026, 3,  6): ("05:37", "18:29"),
+        date(2026, 3,  7): ("05:36", "18:30"),
+        date(2026, 3,  8): ("05:34", "18:31"),
+        date(2026, 3,  9): ("05:32", "18:32"),
+        date(2026, 3, 10): ("05:31", "18:32"),
+        date(2026, 3, 11): ("05:29", "18:34"),
+        date(2026, 3, 12): ("05:27", "18:35"),
+        date(2026, 3, 13): ("05:26", "18:36"),
+        date(2026, 3, 14): ("05:24", "18:37"),
+        date(2026, 3, 15): ("05:22", "18:38"),
+        date(2026, 3, 16): ("05:20", "18:39"),
+        date(2026, 3, 17): ("05:19", "18:40"),
+        date(2026, 3, 18): ("05:17", "18:41"),
+        date(2026, 3, 19): ("05:15", "18:42"),
+        date(2026, 3, 20): ("05:14", "18:44"),
+    },
+
+    "Navoi": {
+        date(2026, 2, 19): ("06:09", "18:22"),
+        date(2026, 2, 20): ("06:08", "18:22"),
+        date(2026, 2, 21): ("06:07", "18:24"),
+        date(2026, 2, 22): ("06:05", "18:25"),
+        date(2026, 2, 23): ("06:04", "18:26"),
+        date(2026, 2, 24): ("06:02", "18:27"),
+        date(2026, 2, 25): ("06:01", "18:28"),
+        date(2026, 2, 26): ("06:00", "18:30"),
+        date(2026, 2, 27): ("05:58", "18:31"),
+        date(2026, 2, 28): ("05:57", "18:32"),
+        date(2026, 3,  1): ("05:55", "18:33"),
+        date(2026, 3,  2): ("05:54", "18:34"),
+        date(2026, 3,  3): ("05:52", "18:35"),
+        date(2026, 3,  4): ("05:50", "18:37"),
+        date(2026, 3,  5): ("05:49", "18:38"),
+        date(2026, 3,  6): ("05:47", "18:39"),
+        date(2026, 3,  7): ("05:46", "18:40"),
+        date(2026, 3,  8): ("05:44", "18:41"),
+        date(2026, 3,  9): ("05:42", "18:42"),
+        date(2026, 3, 10): ("05:41", "18:42"),
+        date(2026, 3, 11): ("05:39", "18:44"),
+        date(2026, 3, 12): ("05:37", "18:45"),
+        date(2026, 3, 13): ("05:36", "18:46"),
+        date(2026, 3, 14): ("05:34", "18:47"),
+        date(2026, 3, 15): ("05:32", "18:48"),
+        date(2026, 3, 16): ("05:30", "18:49"),
+        date(2026, 3, 17): ("05:29", "18:50"),
+        date(2026, 3, 18): ("05:27", "18:51"),
+        date(2026, 3, 19): ("05:25", "18:52"),
+        date(2026, 3, 20): ("05:24", "18:54"),
+    },
+
+    "Termez": {
+        date(2026, 2, 19): ("05:58", "18:20"),
+        date(2026, 2, 20): ("05:59", "18:19"),
+        date(2026, 2, 21): ("05:58", "18:21"),
+        date(2026, 2, 22): ("05:56", "18:22"),
+        date(2026, 2, 23): ("05:55", "18:23"),
+        date(2026, 2, 24): ("05:53", "18:24"),
+        date(2026, 2, 25): ("05:52", "18:25"),
+        date(2026, 2, 26): ("05:51", "18:27"),
+        date(2026, 2, 27): ("05:49", "18:28"),
+        date(2026, 2, 28): ("05:49", "18:28"),
+        date(2026, 3,  1): ("05:47", "18:29"),
+        date(2026, 3,  2): ("05:46", "18:30"),
+        date(2026, 3,  3): ("05:44", "18:31"),
+        date(2026, 3,  4): ("05:42", "18:33"),
+        date(2026, 3,  5): ("05:41", "18:34"),
+        date(2026, 3,  6): ("05:39", "18:35"),
+        date(2026, 3,  7): ("05:38", "18:36"),
+        date(2026, 3,  8): ("05:36", "18:37"),
+        date(2026, 3,  9): ("05:34", "18:38"),
+        date(2026, 3, 10): ("05:34", "18:37"),
+        date(2026, 3, 11): ("05:32", "18:39"),
+        date(2026, 3, 12): ("05:30", "18:40"),
+        date(2026, 3, 13): ("05:29", "18:41"),
+        date(2026, 3, 14): ("05:27", "18:42"),
+        date(2026, 3, 15): ("05:25", "18:43"),
+        date(2026, 3, 16): ("05:23", "18:44"),
+        date(2026, 3, 17): ("05:22", "18:45"),
+        date(2026, 3, 18): ("05:20", "18:46"),
+        date(2026, 3, 19): ("05:18", "18:47"),
+        date(2026, 3, 20): ("05:18", "18:47"),
+    },
+
+    "Gulistan": {
+        date(2026, 2, 19): ("05:56", "18:07"),
+        date(2026, 2, 20): ("05:55", "18:08"),
+        date(2026, 2, 21): ("05:54", "18:10"),
+        date(2026, 2, 22): ("05:52", "18:11"),
+        date(2026, 2, 23): ("05:51", "18:12"),
+        date(2026, 2, 24): ("05:49", "18:13"),
+        date(2026, 2, 25): ("05:48", "18:14"),
+        date(2026, 2, 26): ("05:47", "18:16"),
+        date(2026, 2, 27): ("05:45", "18:17"),
+        date(2026, 2, 28): ("05:44", "18:18"),
+        date(2026, 3,  1): ("05:42", "18:19"),
+        date(2026, 3,  2): ("05:41", "18:20"),
+        date(2026, 3,  3): ("05:39", "18:21"),
+        date(2026, 3,  4): ("05:37", "18:23"),
+        date(2026, 3,  5): ("05:36", "18:24"),
+        date(2026, 3,  6): ("05:34", "18:25"),
+        date(2026, 3,  7): ("05:33", "18:26"),
+        date(2026, 3,  8): ("05:31", "18:27"),
+        date(2026, 3,  9): ("05:29", "18:28"),
+        date(2026, 3, 10): ("05:28", "18:28"),
+        date(2026, 3, 11): ("05:26", "18:30"),
+        date(2026, 3, 12): ("05:24", "18:31"),
+        date(2026, 3, 13): ("05:23", "18:32"),
+        date(2026, 3, 14): ("05:21", "18:33"),
+        date(2026, 3, 15): ("05:19", "18:34"),
+        date(2026, 3, 16): ("05:17", "18:35"),
+        date(2026, 3, 17): ("05:16", "18:36"),
+        date(2026, 3, 18): ("05:14", "18:37"),
+        date(2026, 3, 19): ("05:12", "18:38"),
+        date(2026, 3, 20): ("05:10", "18:40"),
+    },
+
+    "Kokand": {
+        date(2026, 2, 19): ("05:47", "17:58"),
+        date(2026, 2, 20): ("05:46", "17:59"),
+        date(2026, 2, 21): ("05:45", "18:01"),
+        date(2026, 2, 22): ("05:43", "18:02"),
+        date(2026, 2, 23): ("05:42", "18:03"),
+        date(2026, 2, 24): ("05:40", "18:04"),
+        date(2026, 2, 25): ("05:39", "18:05"),
+        date(2026, 2, 26): ("05:38", "18:07"),
+        date(2026, 2, 27): ("05:36", "18:08"),
+        date(2026, 2, 28): ("05:35", "18:09"),
+        date(2026, 3,  1): ("05:33", "18:10"),
+        date(2026, 3,  2): ("05:32", "18:11"),
+        date(2026, 3,  3): ("05:30", "18:12"),
+        date(2026, 3,  4): ("05:28", "18:14"),
+        date(2026, 3,  5): ("05:27", "18:15"),
+        date(2026, 3,  6): ("05:25", "18:16"),
+        date(2026, 3,  7): ("05:24", "18:17"),
+        date(2026, 3,  8): ("05:22", "18:18"),
+        date(2026, 3,  9): ("05:20", "18:19"),
+        date(2026, 3, 10): ("05:19", "18:19"),
+        date(2026, 3, 11): ("05:17", "18:21"),
+        date(2026, 3, 12): ("05:15", "18:22"),
+        date(2026, 3, 13): ("05:14", "18:23"),
+        date(2026, 3, 14): ("05:12", "18:24"),
+        date(2026, 3, 15): ("05:10", "18:25"),
+        date(2026, 3, 16): ("05:08", "18:26"),
+        date(2026, 3, 17): ("05:07", "18:27"),
+        date(2026, 3, 18): ("05:05", "18:28"),
+        date(2026, 3, 19): ("05:03", "18:29"),
+        date(2026, 3, 20): ("05:02", "18:31"),
+    },
+}
+# fmt: on
+
+# Per-city Ramadan day 1 reference dates
+_RAMADAN_DAY1: dict[str, date] = {
+    "Tashkent":  date(2026, 2, 19),   # Kun 1 = Feb 19
+    "Samarkand": date(2026, 2, 18),   # Kun 2 = Feb 19 → day 1 = Feb 18
+    "Bukhara":   date(2026, 2, 18),
+    "Namangan":  date(2026, 2, 18),
+    "Andijan":   date(2026, 2, 18),
+    "Fergana":   date(2026, 2, 18),
+    "Nukus":     date(2026, 2, 18),
+    "Karshi":    date(2026, 2, 18),
+    "Urgench":   date(2026, 2, 18),
+    "Jizzakh":   date(2026, 2, 18),
+    "Navoi":     date(2026, 2, 18),
+    "Termez":    date(2026, 2, 18),
+    "Gulistan":  date(2026, 2, 18),
+    "Kokand":    date(2026, 2, 18),
+}
+
+
 async def get_fasting_times(city: str = "Tashkent", target_date: Optional[date] = None) -> Optional[FastingTimes]:
     """
-    Fetch fasting times for a city in Uzbekistan.
+    Return official Muftiyat fasting times for a city.
+
+    All data is hardcoded from the 2026 Uzbekistan Muftiyat timetable.
+    No external API is used.
 
     Args:
-        city: Aladhan API city name (e.g. "Tashkent", "Samarkand")
-        target_date: Specific date to fetch. None = today (default).
+        city: City key matching UZBEKISTAN_CITIES in constants.py
+        target_date: Date to look up. Defaults to today (UZT).
 
-    Returns FastingTimes dataclass or None on failure.
-    Results are cached per city+date for 6 hours.
+    Returns FastingTimes or None if the date is outside the Ramadan schedule.
     """
-    # Build cache key (city + date)
-    date_str = target_date.strftime("%d-%m-%Y") if target_date else "today"
-    cache_key = f"{city}_{date_str}"
+    today = target_date or datetime.now(UZT).date()
+    city_schedule = _TIMES.get(city)
 
-    # Check cache
-    now = time.time()
-    if cache_key in _cache:
-        cached_data, cached_at = _cache[cache_key]
-        if now - cached_at < _CACHE_TTL:
-            logger.debug(f"Cache hit for {cache_key}")
-            return _parse_response(cached_data, city)
+    if city_schedule is None:
+        logger.warning(f"No timetable for city '{city}' — defaulting to Tashkent")
+        city_schedule = _TIMES["Tashkent"]
+        city = "Tashkent"
 
-    # Build API URL — date goes in the URL path
-    if target_date:
-        url = f"{_ALADHAN_URL}/{target_date.strftime('%d-%m-%Y')}"
-    else:
-        url = _ALADHAN_URL
-
-    params = {
-        "city": city,
-        "country": "Uzbekistan",
-        "method": _CALCULATION_METHOD,
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(f"Aladhan API error {resp.status} for {cache_key}")
-                    return _get_cached_fallback(cache_key, city)
-
-                data = await resp.json()
-                if data.get("code") != 200:
-                    logger.error(f"Aladhan API returned non-200 code for {cache_key}")
-                    return _get_cached_fallback(cache_key, city)
-
-                # Cache the raw response
-                _cache[cache_key] = (data, now)
-                logger.info(f"Fetched fasting times for {cache_key}")
-                return _parse_response(data, city)
-
-    except (aiohttp.ClientError, Exception) as e:
-        logger.error(f"Aladhan API request failed for {cache_key}: {e}")
-        return _get_cached_fallback(cache_key, city)
-
-
-def _get_cached_fallback(cache_key: str, city: str) -> Optional[FastingTimes]:
-    """Return stale cached data if available (better than nothing)."""
-    if cache_key in _cache:
-        cached_data, _ = _cache[cache_key]
-        logger.warning(f"Using stale cache for {cache_key}")
-        return _parse_response(cached_data, city)
-    return None
-
-
-def _parse_response(data: dict, city: str) -> Optional[FastingTimes]:
-    """Parse Aladhan API JSON response into FastingTimes."""
-    try:
-        timings = data["data"]["timings"]
-        hijri = data["data"]["date"]["hijri"]
-
-        return FastingTimes(
-            city=city,
-            imsak=timings.get("Imsak", ""),
-            fajr=timings.get("Fajr", ""),
-            sunrise=timings.get("Sunrise", ""),
-            maghrib=timings.get("Maghrib", ""),
-            ramadan_day=int(hijri.get("day", 0)),
-            hijri_date=hijri.get("date", ""),
-            hijri_month=hijri["month"].get("number", 0),
-            hijri_year=hijri.get("year", ""),
-        )
-    except (KeyError, ValueError, TypeError) as e:
-        logger.error(f"Failed to parse Aladhan response for {city}: {e}")
+    entry = city_schedule.get(today)
+    if entry is None:
+        logger.info(f"No Ramadan data for {city} on {today} (outside schedule)")
         return None
+
+    imsak, maghrib = entry
+    day1 = _RAMADAN_DAY1.get(city, date(2026, 2, 18))
+    ramadan_day = (today - day1).days + 1
+
+    logger.info(f"Serving hardcoded times for {city} / {today}: imsak={imsak} maghrib={maghrib}")
+    return FastingTimes(
+        city=city,
+        imsak=imsak,
+        fajr=imsak,
+        sunrise="",
+        maghrib=maghrib,
+        ramadan_day=ramadan_day,
+        hijri_date="",
+        hijri_month=9,
+        hijri_year="1447",
+    )
 
 
 def get_iftar_countdown(maghrib_time: str) -> Optional[str]:
     """
-    Calculate time remaining until iftar (Maghrib).
-    Returns formatted string like "5 soat 23 daqiqa" or None if iftar has passed.
-
-    This data can also be used by future notification features.
+    Time remaining until iftar (Maghrib).
+    Returns e.g. '5 soat 23 daqiqa' or None if iftar has passed.
     """
     try:
         now = datetime.now(UZT)
         hour, minute = map(int, maghrib_time.split(":"))
         iftar = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
         diff = iftar - now
         if diff.total_seconds() <= 0:
-            return None  # Iftar has already passed today
+            return None
 
         total_minutes = int(diff.total_seconds() // 60)
         hours = total_minutes // 60
         minutes = total_minutes % 60
-
         if hours > 0:
             return f"{hours} soat {minutes} daqiqa"
         return f"{minutes} daqiqa"
@@ -164,11 +589,7 @@ def get_iftar_countdown(maghrib_time: str) -> Optional[str]:
 
 
 def is_ramadan_active() -> bool:
-    """Check if we're currently in Ramadan based on date range.
-
-    Uses a generous date range to account for moon-sighting variations.
-    The API's hijri month field provides the definitive check.
-    """
+    """Check if today falls within the Ramadan 2026 schedule."""
     from app.constants import RAMADAN_START, RAMADAN_END
     today = datetime.now(UZT).date()
     return RAMADAN_START <= today <= RAMADAN_END

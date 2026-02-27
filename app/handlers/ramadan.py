@@ -190,9 +190,7 @@ async def _show_fasting_times(message: Message, city_key: str, tomorrow: bool = 
     text = (
         f"{header}\n\n"
         f"{day_info}\n\n"
-        f"🍽 *Saharlik tugashi (imsok):* {times.imsak}\n"
-        f"🌅 *Bomdod (fajr):* {times.fajr}\n"
-        f"☀️ *Quyosh chiqishi:* {times.sunrise}\n\n"
+        f"🍽 *Saharlik tugashi (imsok):* {times.imsak}\n\n"
         f"🌆 *Iftorlik (mag\u2019rib):* {times.maghrib}\n"
         f"{countdown_line}\n"
         "─────────────────"

@@ -43,7 +43,7 @@ def uzbek_month_year(dt) -> str:
     return f"{MONTH_NAMES_UZ[dt.month]} {dt.year}"
 
 
-# ── Uzbekistan cities (for Ramadan feature — Aladhan API) ────
+# ── Uzbekistan cities (Ramadan feature — official Muftiyat timetable) ────
 
 UZBEKISTAN_CITIES = {
     "Tashkent": "Toshkent",
