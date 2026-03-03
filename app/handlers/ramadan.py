@@ -49,11 +49,15 @@ SAHARLIK_DUA = (
 IFTORLIK_DUA = (
     "📿 *Iftorlik (ro\u2019za ochish) duosi:*\n\n"
     "\"Allohumma laka sumtu va bika amantu "
-    "va \u2019alayka tavakkaltu "
-    "va \u2019ala rizqika aftartu\"\n\n"
-    "📖 Ma\u2019nosi: Ey Alloh, Sen uchun ro\u2019za tutdim, "
-    "Senga iymon keltirdim, Senga tavakkal qildim "
-    "va bergan rizqing bilan iftor qildim."
+    "va \u02bcalayka tavakkaltu "
+    "va \u02bcala rizqika aftartu, "
+    "fag\u02bcfirli ya G\u02bcoffaru ma qoddamtu "
+    "va ma axxortu.\"\n\n"
+    "📖 Ma\u02bcnosi: Ey Alloh, ushbu ro\u02bczamni Sen uchun tutdim "
+    "va Senga iymon keltirdim va Senga tavakkal qildim "
+    "va bergan rizqing bilan iftor qildim. "
+    "Ey gunohlarni afv qiluvchi Zot, "
+    "mening avvalgi va keyingi gunohlarimni mag\u02bcfirat qilgil."
 )
 
 
