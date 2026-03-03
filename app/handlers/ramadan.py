@@ -22,7 +22,7 @@ from aiogram.fsm.context import FSMContext
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.services.ramadan import get_fasting_times, get_iftar_countdown, is_ramadan_active
-from app.constants import UZBEKISTAN_CITIES, UZT
+from app.constants import UZBEKISTAN_CITIES, UZT, MONTH_NAMES_UZ
 from app.utils.logger import setup_logger
 
 logger = setup_logger("ramadan_handler")
@@ -184,9 +184,17 @@ async def _show_fasting_times(message: Message, city_key: str, tomorrow: bool = 
         else:
             countdown_line = "\n🎉 *Bugungi iftor vaqti o\u2019tdi!*\n"
 
-    # Ramadan day info
+    # Build date strings
+    display_date = target_date or datetime.now(UZT).date()
+    gregorian_str = f"{display_date.day}-{MONTH_NAMES_UZ[display_date.month]} {display_date.year}"
+    hijri_str = "Ramazon 1447 h."
+
+    # Ramadan day info + dates
     if times.hijri_month == 9:  # Ramadan
-        day_info = f"📅 *{times.ramadan_day}-kun* / 30"
+        day_info = (
+            f"📅 *{times.ramadan_day}-kun* / 30\n"
+            f"🗓 {gregorian_str}  \u2022  {hijri_str}"
+        )
     else:
         day_info = "📅 Ramazon"
 
