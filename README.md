@@ -171,7 +171,7 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 | Backend Hosting | Render (webhook mode) |
 | Keep-Alive | Koyeb pinger service |
 
-## Production Audit (Feb 2026)
+## Production Audit (March 2026)
 
 > ✅ **Verdict: Production-Ready**
 
@@ -186,20 +186,17 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 - SSL enforced + `pool_pre_ping` + `statement_cache_size=0` for PgBouncer
 - In-memory voice pipeline (no disk I/O, OGG native format)
 - Confirmation flow prevents accidental data entry
-- Pending confirmations have 5-min TTL with stale cleanup
 
-### Known Issues (non-blocking)
+### Known Issues & Technical Debt
 | # | Severity | Issue | Status |
 |---|----------|-------|--------|
-| 1 | 🔴 | `credentials.json` may have been committed to git history | Verify & rotate if needed |
-| 2 | 🟡 | `/stats` endpoint is intentionally unauthenticated | Acceptable (public dashboard) |
-| 3 | 🟡 | In-memory pending confirmations lost on restart | Low risk (5-min TTL) |
-| 4 | 🟡 | Broadcast could timeout for large user bases (500+) | Future: background task |
-| 5 | 🟢 | Yandex confidence hardcoded to 0.95 | Defensive, non-harmful |
-| 6 | 🟢 | FSM storage is in-memory (default MemoryStorage) | Low risk for short flows |
-| 7 | 🟢 | Health check doesn't ping database | Consider adding DB ping |
-| 8 | 🟢 | Admin token comparison is not timing-safe | Very low risk (internal API) |
-| 9 | 🟡 | Broadcast shows error **count** only — no details on which users failed | See Roadmap |
+| 1 | 🔴 | **Timing Attack in Admin Auth:** `_check_admin` uses `==` instead of `secrets.compare_digest`. | Pending Fix |
+| 2 | 🟡 | **Opaque Broadcast Failures:** Broadcast doesn't log *which* specific user IDs failed. | Pending Fix |
+| 3 | 🟡 | **Incomplete Health Check:** `/` health endpoint doesn't ping the PostgreSQL DB. | Pending Fix |
+| 4 | 🟡 | **Hardcoded Ramadan Data:** Timetable is hardcoded for 2026 (1447 AH) only. | Pending Fix (Required by 2027) |
+| 5 | 🟡 | **Memory-bound Confirmations:** Pending confirmations lost on instance restart. | Acceptable (5-min TTL) |
+| 6 | 🟢 | **In-Memory FSM:** aiogram uses `MemoryStorage`. Limits horizontal scaling. | Acceptable |
+| 7 | 🔴 | **Git Secrets:** `credentials.json` may exist in git history. | Verify & Rotate |
 
 ## Roadmap
 
@@ -209,7 +206,7 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 - [x] Edit & undo transactions
 - [x] Interactive onboarding with demo mode
 - [x] CSV export
-- [ ] **Broadcast failure details** — show exactly which users (name / username / Telegram ID) failed to receive the message (currently only the error count is shown)
+- [ ] **Fix Codebase Audit Findings** (Admin Auth, Broadcast logs, DB Health check)
 - [ ] Subscription system & premium features
 - [ ] PDF report export
 - [ ] Multi-currency exchange rates
