@@ -191,12 +191,17 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 | # | Severity | Issue | Status |
 |---|----------|-------|--------|
 | 1 | 🔴 | **Timing Attack in Admin Auth:** `_check_admin` uses `==` instead of `secrets.compare_digest`. | Pending Fix |
-| 2 | 🟡 | **Opaque Broadcast Failures:** Broadcast doesn't log *which* specific user IDs failed. | Pending Fix |
-| 3 | 🟡 | **Incomplete Health Check:** `/` health endpoint doesn't ping the PostgreSQL DB. | Pending Fix |
-| 4 | 🟡 | **Hardcoded Ramadan Data:** Timetable is hardcoded for 2026 (1447 AH) only. | Pending Fix (Required by 2027) |
-| 5 | 🟡 | **Memory-bound Confirmations:** Pending confirmations lost on instance restart. | Acceptable (5-min TTL) |
-| 6 | 🟢 | **In-Memory FSM:** aiogram uses `MemoryStorage`. Limits horizontal scaling. | Acceptable |
-| 7 | 🔴 | **Git Secrets:** `credentials.json` may exist in git history. | Verify & Rotate |
+| 2 | � | **Timing Attack in Webhook:** Webhook secret comparison uses `!=` instead of `secrets.compare_digest`. | Pending Fix |
+| 3 | 🔴 | **Git Secrets:** `credentials.json` may exist in git history. | Verify & Rotate |
+| 4 | �🟡 | **Opaque Broadcast Failures:** Broadcast doesn't log *which* specific user IDs failed. | Pending Fix |
+| 5 | 🟡 | **Incomplete Health Check:** `/` health endpoint doesn't ping the PostgreSQL DB. | Pending Fix |
+| 6 | 🟡 | **Hardcoded Ramadan Data:** Timetable is hardcoded for 2026 (1447 AH) only. | Pending Fix (Required by 2027) |
+| 7 | 🟡 | **No Admin Pagination Bounds:** `/admin/users` accepts arbitrary `limit` with no max cap. | Pending Fix |
+| 8 | 🟡 | **aiohttp Session Per Request:** `speech_service.py` creates a new ClientSession per voice message. | Pending Fix |
+| 9 | 🟡 | **Memory-bound Confirmations:** Pending confirmations lost on instance restart. | Acceptable (5-min TTL) |
+| 10 | 🟢 | **In-Memory FSM:** aiogram uses `MemoryStorage`. Limits horizontal scaling. | Acceptable |
+| 11 | � | **Unused API Keys:** `OPENAI_API_KEY` and `GOOGLE_APPLICATION_CREDENTIALS` in `.env` but not used. | Cleanup |
+| 12 | 🟢 | **Non-descriptive Git Commits:** Recent commits use placeholder messages (`123`, `asd`). | Improve |
 
 ## Roadmap
 
@@ -206,7 +211,8 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 - [x] Edit & undo transactions
 - [x] Interactive onboarding with demo mode
 - [x] CSV export
-- [ ] **Fix Codebase Audit Findings** (Admin Auth, Broadcast logs, DB Health check)
+- [ ] **Fix Codebase Audit Findings** (Admin Auth, Webhook Auth, Broadcast logs, DB Health check, Session reuse)
+- [ ] **Multi-transaction voice** — Extract multiple transactions from a single voice message
 - [ ] Subscription system & premium features
 - [ ] PDF report export
 - [ ] Multi-currency exchange rates

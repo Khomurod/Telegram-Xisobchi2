@@ -54,6 +54,31 @@ class TransactionService:
         user = await self.user_repo.get_or_create(telegram_id, first_name, username)
         return await self._store(user, parsed, telegram_id)
 
+    async def save_parsed_batch(
+        self,
+        telegram_id: int,
+        parsed_list: list[ParsedTransaction],
+        first_name: str = None,
+        username: str = None,
+    ) -> dict:
+        """
+        Save multiple already-parsed transactions.
+
+        Returns dict with 'success', 'transactions' list, and 'count'.
+        """
+        user = await self.user_repo.get_or_create(telegram_id, first_name, username)
+        saved = []
+        for parsed in parsed_list:
+            result = await self._store(user, parsed, telegram_id)
+            if result["success"]:
+                saved.append(result["transaction"])
+
+        return {
+            "success": len(saved) > 0,
+            "transactions": saved,
+            "count": len(saved),
+        }
+
     async def _store(self, user, parsed: ParsedTransaction, telegram_id: int) -> dict:
         """Internal helper: persist a ParsedTransaction to the database."""
         txn = await self.txn_repo.create(

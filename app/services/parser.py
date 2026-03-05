@@ -225,20 +225,79 @@ def _strip_uzbek_suffix(word: str, lookup: dict = None) -> str:
     return word
 
 
+# ── Fragment splitting ────────────────────────────────────────
+
+# Regex that splits on commas, semicolons, and Uzbek/Russian conjunctions
+# used as sentence connectors. Word-boundary ensures "va" inside "davom" etc.
+# is not treated as a split point.
+_SPLIT_PATTERN = re.compile(
+    r'\s*[,;]\s*'               # comma / semicolon
+    r'|\s+(?:va|ham|yana|keyin|undan keyin|so\'ngra)\s+'   # Uzbek conjunctions
+    r'|\s+(?:и|а также|потом|ещё)\s+',                     # Russian conjunctions
+    re.IGNORECASE,
+)
+
+
+def _split_into_fragments(text: str) -> list[str]:
+    """Split a multi-transaction text into individual fragments.
+
+    Returns a list of non-empty stripped fragments.
+    If no split points are found, returns the whole text as one fragment.
+    """
+    parts = _SPLIT_PATTERN.split(text)
+    return [p.strip() for p in parts if p and p.strip()]
+
+
 # ── Public API ────────────────────────────────────────────────
 
-def parse_transaction(text: str) -> Optional[ParsedTransaction]:
-    """Parse Uzbek/Russian financial text into a structured transaction."""
-    if not text or len(text.strip()) < 3:
-        return None
+def parse_transactions(text: str) -> list[ParsedTransaction]:
+    """Parse text that may contain multiple transactions.
 
-    text_lower = _normalize_text(text)
-    logger.info(f"Parsing: '{text_lower}'")
+    Splits on commas, semicolons, and Uzbek/Russian conjunctions (va, ham,
+    yana, и, а также, etc.), then parses each fragment independently.
+
+    Returns a list of successfully parsed transactions (may be empty).
+    """
+    if not text or len(text.strip()) < 3:
+        return []
+
+    normalized = _normalize_text(text)
+    fragments = _split_into_fragments(normalized)
+    logger.info(f"Splitting into {len(fragments)} fragment(s): {fragments}")
+
+    results: list[ParsedTransaction] = []
+    for frag in fragments:
+        parsed = _parse_single(frag, frag)
+        if parsed:
+            results.append(parsed)
+
+    # Fallback: if splitting produced no results, try the whole text as one
+    if not results:
+        parsed = _parse_single(normalized, text.strip())
+        if parsed:
+            results.append(parsed)
+
+    logger.info(f"parse_transactions → {len(results)} transaction(s)")
+    return results
+
+
+def parse_transaction(text: str) -> Optional[ParsedTransaction]:
+    """Parse a single transaction from text (backward-compatible).
+
+    Delegates to parse_transactions() and returns the first result.
+    """
+    results = parse_transactions(text)
+    return results[0] if results else None
+
+
+def _parse_single(text_lower: str, raw_description: str) -> Optional[ParsedTransaction]:
+    """Parse a single normalized text fragment into a transaction."""
+    if len(text_lower.strip()) < 2:
+        return None
 
     # 1. Extract amount (must succeed)
     amount = _extract_amount(text_lower)
     if not amount or amount <= 0:
-        logger.warning(f"No amount found in: '{text_lower}'")
         return None
 
     # 2. Detect type
@@ -263,7 +322,7 @@ def parse_transaction(text: str) -> Optional[ParsedTransaction]:
         amount=amount,
         currency=currency,
         category=category,
-        description=text.strip(),
+        description=raw_description.strip(),
     )
     logger.info(f"Parsed → {result.type} | {result.amount:,.0f} {result.currency} | {result.category}")
     return result

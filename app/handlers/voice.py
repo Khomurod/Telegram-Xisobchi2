@@ -7,7 +7,7 @@ from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
 from app.services.speech_service import transcribe_audio
-from app.services.parser import parse_transaction
+from app.services.parser import parse_transactions
 from app.services.transaction import TransactionService
 from app.config import settings
 from app.constants import CATEGORY_EMOJI, CATEGORY_NAMES
@@ -111,10 +111,10 @@ async def handle_voice(message: types.Message, bot: Bot):
             )
             return
 
-        # Step 4: Parse transaction
-        parsed = parse_transaction(result.text)
+        # Step 4: Parse transaction(s) — supports multiple in one message
+        parsed_list = parse_transactions(result.text)
 
-        if not parsed:
+        if not parsed_list:
             await processing_msg.edit_text(
                 "🤔 Summani aniqlay olmadim.\n"
                 "Iltimos, aniqroq ayting. Masalan:\n"
@@ -122,49 +122,35 @@ async def handle_voice(message: types.Message, bot: Bot):
             )
             return
 
-        # Step 5: Ask for confirmation
-        type_uz = "Kirim" if parsed.type == "income" else "Chiqim"
-        emoji = "📈" if parsed.type == "income" else "📉"
-        cat_emoji = CATEGORY_EMOJI.get(parsed.category, "📦")
-        cat_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
-        amount_str = format_amount(parsed.amount, parsed.currency)
-
-        # Store pending confirmation — include the parsed result so confirm
-        # handler can use it directly without re-parsing (Fix: double-parsing bug)
+        # Step 5: Store pending confirmation with all parsed results
         confirm_key = f"{user_id}_{message.message_id}"
         _pending_confirmations[confirm_key] = {
             "telegram_id": user_id,
             "first_name": message.from_user.first_name,
             "username": message.from_user.username,
             "text": result.text,
-            "parsed": parsed,
+            "parsed_list": parsed_list,
             "confidence": result.confidence,
-            "created_at": time.time(),  # TTL timestamp
+            "created_at": time.time(),
         }
 
-        # Add confidence warning if transcription quality is low
+        # Step 6: Build confirmation message
         conf_warning = ""
         if result.confidence < 0.6:
             conf_warning = "\n⚠️ _Ovoz sifati past. Iltimos, tekshiring._\n"
 
-        confirm_text = (
-            f"{emoji} *{type_uz}*\n"
-            f"💵 {amount_str}\n"
-            f"{cat_emoji} {cat_name}\n\n"
-            f"📝 _{result.text}_\n"
-            f"{conf_warning}\n"
-            f"Shu ma'lumot to'g'rimi?"
-        )
+        confirm_text = _build_confirm_text(parsed_list, result.text, conf_warning)
 
+        btn_label = "✅ Ha, barchasini saqlash" if len(parsed_list) > 1 else "✅ Ha, saqlash"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Ha, saqlash", callback_data=f"confirm_{confirm_key}", style=ButtonStyle.SUCCESS),
+                InlineKeyboardButton(text=btn_label, callback_data=f"confirm_{confirm_key}", style=ButtonStyle.SUCCESS),
                 InlineKeyboardButton(text="❌ Yo'q", callback_data=f"cancel_{confirm_key}", style=ButtonStyle.DANGER),
             ]
         ])
 
         await processing_msg.edit_text(confirm_text, parse_mode="Markdown", reply_markup=keyboard)
-        logger.info(f"Confirmation sent to user {user_id} (conf: {result.confidence:.2f})")
+        logger.info(f"Confirmation sent to user {user_id}: {len(parsed_list)} txn(s) (conf: {result.confidence:.2f})")
 
     except FileNotFoundError as e:
         logger.error(f"Credentials error: {e}")
@@ -182,11 +168,56 @@ async def handle_voice(message: types.Message, bot: Bot):
             pass
 
 
+# ── Confirmation message builder ─────────────────────────────
+
+def _build_confirm_text(
+    parsed_list: list,
+    raw_text: str,
+    conf_warning: str = "",
+) -> str:
+    """Build a confirmation message for one or more parsed transactions."""
+    if len(parsed_list) == 1:
+        # Single transaction — same compact format as before
+        p = parsed_list[0]
+        type_uz = "Kirim" if p.type == "income" else "Chiqim"
+        emoji = "📈" if p.type == "income" else "📉"
+        cat_emoji = CATEGORY_EMOJI.get(p.category, "📦")
+        cat_name = CATEGORY_NAMES.get(p.category, p.category)
+        amount_str = format_amount(p.amount, p.currency)
+        return (
+            f"{emoji} *{type_uz}*\n"
+            f"💵 {amount_str}\n"
+            f"{cat_emoji} {cat_name}\n\n"
+            f"📝 _{raw_text}_\n"
+            f"{conf_warning}\n"
+            f"Shu ma'lumot to'g'rimi?"
+        )
+
+    # Multiple transactions — numbered list
+    lines = [f"📋 *{len(parsed_list)} ta operatsiya topildi:*\n"]
+    for i, p in enumerate(parsed_list, 1):
+        emoji = "📈" if p.type == "income" else "📉"
+        type_uz = "Kirim" if p.type == "income" else "Chiqim"
+        cat_emoji = CATEGORY_EMOJI.get(p.category, "📦")
+        cat_name = CATEGORY_NAMES.get(p.category, p.category)
+        amount_str = format_amount(p.amount, p.currency)
+        lines.append(
+            f"*{i}.* {emoji} {type_uz} — {amount_str}\n"
+            f"     {cat_emoji} {cat_name}"
+        )
+
+    lines.append(f"\n📝 _{raw_text}_")
+    if conf_warning:
+        lines.append(conf_warning)
+    lines.append("\nBarchasini saqlaymizmi?")
+    return "\n".join(lines)
+
+
 # ── Confirmation callbacks ───────────────────────────────────
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def handle_confirm(callback: CallbackQuery):
-    """Save transaction after user confirms — uses pre-parsed result (no re-parsing)."""
+    """Save all parsed transactions after user confirms."""
     confirm_key = callback.data.replace("confirm_", "")
     pending = _pending_confirmations.pop(confirm_key, None)
 
@@ -194,40 +225,59 @@ async def handle_confirm(callback: CallbackQuery):
         await callback.answer("Bu operatsiya eskirgan. Qaytadan yuboring.", show_alert=True)
         return
 
+    parsed_list = pending.get("parsed_list") or ([pending["parsed"]] if "parsed" in pending else [])
+
     try:
         async with async_session() as session:
             user_repo = UserRepository(session)
             txn_repo = TransactionRepository(session)
             service = TransactionService(user_repo, txn_repo)
 
-            # Use save_parsed() — the parsed result is what the user already approved,
-            # so we store exactly that rather than re-parsing the raw text.
-            result = await service.save_parsed(
-                telegram_id=pending["telegram_id"],
-                parsed=pending["parsed"],
-                first_name=pending["first_name"],
-                username=pending["username"],
-            )
+            if len(parsed_list) == 1:
+                result = await service.save_parsed(
+                    telegram_id=pending["telegram_id"],
+                    parsed=parsed_list[0],
+                    first_name=pending["first_name"],
+                    username=pending["username"],
+                )
+                if result["success"]:
+                    txn = result["transaction"]
+                    emoji = "📈" if txn["type"] == "income" else "📉"
+                    type_uz = "Kirim" if txn["type"] == "income" else "Chiqim"
+                    cat_emoji = CATEGORY_EMOJI.get(txn["category"], "📦")
+                    amount_str = format_amount(txn["amount"], txn["currency"])
+                    response = (
+                        f"✅ Operatsiya saqlandi!\n\n"
+                        f"{emoji} *Tur:* {type_uz}\n"
+                        f"💵 *Summa:* {amount_str}\n"
+                        f"{cat_emoji} *Kategoriya:* {txn['category']}\n"
+                    )
+                    await callback.message.edit_text(response, parse_mode="Markdown")
+                else:
+                    await callback.message.edit_text(
+                        "⚠️ Saqlashda xatolik yuz berdi. Qaytadan urinib ko'ring."
+                    )
+            else:
+                result = await service.save_parsed_batch(
+                    telegram_id=pending["telegram_id"],
+                    parsed_list=parsed_list,
+                    first_name=pending["first_name"],
+                    username=pending["username"],
+                )
+                if result["success"]:
+                    lines = [f"✅ *{result['count']} ta operatsiya saqlandi!*\n"]
+                    for i, txn in enumerate(result["transactions"], 1):
+                        emoji = "📈" if txn["type"] == "income" else "📉"
+                        cat_emoji = CATEGORY_EMOJI.get(txn["category"], "📦")
+                        amount_str = format_amount(txn["amount"], txn["currency"])
+                        lines.append(f"{i}. {emoji} {amount_str} — {cat_emoji} {txn['category']}")
+                    await callback.message.edit_text("\n".join(lines), parse_mode="Markdown")
+                else:
+                    await callback.message.edit_text(
+                        "⚠️ Saqlashda xatolik yuz berdi. Qaytadan urinib ko'ring."
+                    )
 
-        if result["success"]:
-            txn = result["transaction"]
-            emoji = "📈" if txn["type"] == "income" else "📉"
-            type_uz = "Kirim" if txn["type"] == "income" else "Chiqim"
-            cat_emoji = CATEGORY_EMOJI.get(txn["category"], "📦")
-            amount_str = format_amount(txn["amount"], txn["currency"])
-
-            response = (
-                f"✅ Operatsiya saqlandi!\n\n"
-                f"{emoji} *Tur:* {type_uz}\n"
-                f"💵 *Summa:* {amount_str}\n"
-                f"{cat_emoji} *Kategoriya:* {txn['category']}\n"
-            )
-            await callback.message.edit_text(response, parse_mode="Markdown")
-            logger.info(f"Transaction confirmed and saved for user {pending['telegram_id']}")
-        else:
-            await callback.message.edit_text(
-                "⚠️ Saqlashda xatolik yuz berdi. Qaytadan urinib ko'ring."
-            )
+        logger.info(f"{len(parsed_list)} transaction(s) confirmed and saved for user {pending['telegram_id']}")
 
     except Exception as e:
         logger.error(f"Confirmation error: {e}", exc_info=True)
@@ -238,7 +288,7 @@ async def handle_confirm(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("cancel_"))
 async def handle_cancel(callback: CallbackQuery):
-    """Cancel transaction - don't save."""
+    """Cancel transaction(s) - don't save."""
     confirm_key = callback.data.replace("cancel_", "")
     _pending_confirmations.pop(confirm_key, None)
 
