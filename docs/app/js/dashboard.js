@@ -7,42 +7,87 @@
 
 /* global apiGetDashboard, fmtAmount, fmtNum, hapticLight */
 
-function renderDashboard(container) {
-    container.innerHTML = `
-    <div class="screen" id="dashboard-screen">
-      <div class="loading-screen"><div class="loading-spinner"></div><p>Yuklanmoqda…</p></div>
-    </div>`;
+const DASHBOARD_CACHE_KEY = 'xisobchi_dashboard_cache';
 
-    loadDashboardData(container);
+function renderDashboard(container) {
+    // Try to render from cache instantly
+    const cached = _getDashboardCache();
+    if (cached) {
+        const wrapper = document.createElement('div');
+        buildDashboardHtml(wrapper, cached);
+        container.innerHTML = wrapper.innerHTML;
+        // Animate bars
+        _animateCategoryBars();
+    } else {
+        container.innerHTML = `
+        <div class="screen" id="dashboard-screen">
+          <div class="loading-screen"><div class="loading-spinner"></div><p>Yuklanmoqda…</p></div>
+        </div>`;
+    }
+
+    // Always fetch fresh data in background
+    loadDashboardData(container, !!cached);
 }
 
-async function loadDashboardData(container) {
+function _getDashboardCache() {
+    try {
+        const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // Cache valid for 5 minutes
+        if (Date.now() - (parsed._ts || 0) > 5 * 60 * 1000) return null;
+        return parsed;
+    } catch { return null; }
+}
+
+function _setDashboardCache(data) {
+    try {
+        localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({ ...data, _ts: Date.now() }));
+    } catch { /* quota exceeded */ }
+}
+
+async function loadDashboardData(container, hasCacheAlready) {
     try {
         const data = await apiGetDashboard();
+        _setDashboardCache(data);
+
         const screen = container.querySelector('#dashboard-screen') || container;
+        const wrapper = document.createElement('div');
+        buildDashboardHtml(wrapper, data);
+        screen.outerHTML = wrapper.innerHTML;
 
-        const firstName = data.user?.first_name || 'Foydalanuvchi';
-        const uzs = data.balance?.uzs || { income: 0, expense: 0, balance: 0 };
-        const usd = data.balance?.usd || { income: 0, expense: 0, balance: 0 };
-        const recent = data.recent || [];
-        const categories = data.categories || [];
+        _animateCategoryBars();
+    } catch (err) {
+        if (hasCacheAlready) return; // Silent fail if we already rendered cache
 
-        const hasUzs = uzs.income > 0 || uzs.expense > 0;
-        const hasUsd = usd.income > 0 || usd.expense > 0;
-
-        let html = `<div class="screen">`;
-
-        // Greeting
-        html += `
-      <div class="greeting">
-        <div class="greeting-hello">Assalomu alaykum 👋</div>
-        <div class="greeting-name">${escHtml(firstName)}</div>
+        const screen = container.querySelector('#dashboard-screen') || container;
+        screen.innerHTML = `
+      <div class="screen">
+        <div class="empty-state">
+          <div class="empty-state-icon">⚠️</div>
+          <div>Ma'lumotlar yuklanmadi</div>
+          <div style="font-size:.75rem;margin-top:6px;color:var(--tg-hint)">${escHtml(err.message)}</div>
+        </div>
       </div>`;
+    }
+}
 
-        // Balance cards
-        html += `<div class="balance-cards">`;
+function buildDashboardHtml(wrapper, data) {
+    const firstName = data.user?.first_name || 'Foydalanuvchi';
+    const uzs = data.balance?.uzs || { income: 0, expense: 0, balance: 0 };
+    const usd = data.balance?.usd || { income: 0, expense: 0, balance: 0 };
+    const recent = data.recent || [];
+    const categories = data.categories || [];
 
-        html += `
+    const hasUzs = uzs.income > 0 || uzs.expense > 0;
+    const hasUsd = usd.income > 0 || usd.expense > 0;
+
+    // Load default currency from settings
+    let defaultCur = 'UZS';
+    try { defaultCur = JSON.parse(localStorage.getItem('xisobchi_settings'))?.defaultCurrency || 'UZS'; } catch { /* ignore */ }
+
+    // Reorder cards based on default currency
+    const uzsHtml = `
       <div class="balance-card uzs">
         <div class="balance-card-flag">🇺🇿</div>
         <div class="balance-card-label">Balans (so'm)</div>
@@ -55,8 +100,7 @@ async function loadDashboardData(container) {
         </div>
       </div>`;
 
-        if (hasUsd) {
-            html += `
+    const usdHtml = hasUsd ? `
         <div class="balance-card usd">
           <div class="balance-card-flag">🇺🇸</div>
           <div class="balance-card-label">Balans (USD)</div>
@@ -67,50 +111,65 @@ async function loadDashboardData(container) {
             <span class="income">↑ $${fmtNum(usd.income)}</span>
             <span class="expense">↓ $${fmtNum(usd.expense)}</span>
           </div>
-        </div>`;
-        }
+        </div>` : '';
 
-        html += `</div>`;
+    let html = `<div class="screen" id="dashboard-screen">`;
 
-        // Today's transactions
-        html += `
+    // Greeting
+    html += `
+      <div class="greeting">
+        <div class="greeting-hello">Assalomu alaykum 👋</div>
+        <div class="greeting-name">${escHtml(firstName)}</div>
+      </div>`;
+
+    // Balance cards
+    html += `<div class="balance-cards">`;
+    if (defaultCur === 'USD' && hasUsd) {
+        html += usdHtml + uzsHtml;
+    } else {
+        html += uzsHtml + usdHtml;
+    }
+    html += `</div>`;
+
+    // Today's transactions
+    html += `
       <div class="section">
         <div class="section-header">
           <div class="section-title">📊 Bugungi operatsiyalar</div>
           <a class="section-link" onclick="location.hash='#/transactions'">Barchasi →</a>
         </div>`;
 
-        if (recent.length === 0) {
-            html += `
+    if (recent.length === 0) {
+        html += `
         <div class="empty-state">
           <div class="empty-state-icon">📭</div>
           <div>Bugun hali operatsiya yo'q</div>
         </div>`;
-        } else {
-            html += `<div class="txn-list">`;
-            for (const txn of recent) {
-                html += renderTxnRow(txn);
-            }
-            html += `</div>`;
+    } else {
+        html += `<div class="txn-list">`;
+        for (const txn of recent) {
+            html += renderTxnRow(txn);
         }
-
         html += `</div>`;
+    }
 
-        // Monthly categories (expenses only)
-        const expenseCats = categories.filter(c => c.type === 'expense' && c.currency === 'UZS');
-        if (expenseCats.length > 0) {
-            const maxTotal = Math.max(...expenseCats.map(c => c.total));
+    html += `</div>`;
 
-            html += `
+    // Monthly categories (expenses only)
+    const expenseCats = categories.filter(c => c.type === 'expense' && c.currency === 'UZS');
+    if (expenseCats.length > 0) {
+        const maxTotal = Math.max(...expenseCats.map(c => c.total));
+
+        html += `
         <div class="section">
           <div class="section-header">
             <div class="section-title">📅 Oylik chiqimlar</div>
           </div>
           <div class="cat-list">`;
 
-            for (const cat of expenseCats) {
-                const pct = maxTotal > 0 ? (cat.total / maxTotal * 100) : 0;
-                html += `
+        for (const cat of expenseCats) {
+            const pct = maxTotal > 0 ? (cat.total / maxTotal * 100) : 0;
+            html += `
           <div class="cat-row">
             <div class="cat-header">
               <span class="cat-name">${cat.category_emoji} ${escHtml(cat.category_name)}</span>
@@ -120,34 +179,23 @@ async function loadDashboardData(container) {
               <div class="cat-fill expense-fill" style="width:${pct}%"></div>
             </div>
           </div>`;
-            }
-
-            html += `</div></div>`;
         }
 
-        html += `</div>`;
-        screen.outerHTML = html;
-
-        // Animate category bars after DOM paint
-        requestAnimationFrame(() => {
-            document.querySelectorAll('.cat-fill').forEach(bar => {
-                const w = bar.style.width;
-                bar.style.width = '0%';
-                requestAnimationFrame(() => { bar.style.width = w; });
-            });
-        });
-
-    } catch (err) {
-        const screen = container.querySelector('#dashboard-screen') || container;
-        screen.innerHTML = `
-      <div class="screen">
-        <div class="empty-state">
-          <div class="empty-state-icon">⚠️</div>
-          <div>Ma'lumotlar yuklanmadi</div>
-          <div style="font-size:.75rem;margin-top:6px;color:var(--tg-hint)">${escHtml(err.message)}</div>
-        </div>
-      </div>`;
+        html += `</div></div>`;
     }
+
+    html += `</div>`;
+    wrapper.innerHTML = html;
+}
+
+function _animateCategoryBars() {
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.cat-fill').forEach(bar => {
+            const w = bar.style.width;
+            bar.style.width = '0%';
+            requestAnimationFrame(() => { bar.style.width = w; });
+        });
+    });
 }
 
 /** Render a single transaction row */

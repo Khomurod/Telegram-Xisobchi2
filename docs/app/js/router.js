@@ -9,7 +9,7 @@
  * Boots the app after loading.
  */
 
-/* global renderDashboard, renderTransactions, renderAddForm, renderReports, cleanupAddForm,
+/* global renderDashboard, renderTransactions, renderAddForm, renderReports, renderSettings, cleanupAddForm,
           showBackButton, hideBackButton, hideMainButton, hapticLight, tg */
 
 const ROUTES = {
@@ -17,6 +17,7 @@ const ROUTES = {
     '#/transactions': { render: renderTransactions, name: 'transactions' },
     '#/add': { render: renderAddForm, name: 'add' },
     '#/reports': { render: renderReports, name: 'reports' },
+    '#/settings': { render: renderSettings, name: 'settings' },
 };
 
 let _currentRoute = null;
