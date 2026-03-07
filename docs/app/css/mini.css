@@ -818,3 +818,220 @@ body {
         grid-template-columns: repeat(4, 1fr)
     }
 }
+
+/* ── Phase 2: Chart styles ───────────────────────────────── */
+
+/* SVG Donut chart */
+.donut-wrap {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    margin: 0 auto 14px;
+}
+
+.donut-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(0deg);
+}
+
+.donut-track {
+    stroke: var(--tg-secondary-bg);
+}
+
+.income-ring {
+    stroke: var(--income);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(.4, 0, .2, 1);
+}
+
+.expense-ring {
+    stroke: var(--expense);
+    stroke-linecap: round;
+}
+
+.donut-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.donut-pct {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--tg-text);
+}
+
+.donut-sub {
+    font-size: .68rem;
+    color: var(--tg-hint);
+    margin-top: 2px;
+}
+
+/* Legend */
+.donut-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    font-size: .75rem;
+    color: var(--tg-hint);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.income-dot {
+    background: var(--income)
+}
+
+.expense-dot {
+    background: var(--expense)
+}
+
+/* Chart card container */
+.chart-card {
+    background: var(--tg-section-bg);
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius);
+    padding: 14px;
+}
+
+.chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: .72rem;
+    color: var(--tg-hint);
+}
+
+.chart-legend span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* 7-day bar chart */
+.day-chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 4px;
+    height: 90px;
+}
+
+.day-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.day-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 64px;
+    flex: 1;
+}
+
+.bar-wrap {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--tg-secondary-bg);
+}
+
+.bar-fill {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    transition: height .8s cubic-bezier(.4, 0, .2, 1);
+    min-height: 2px;
+}
+
+.income-bar {
+    background: var(--income)
+}
+
+.expense-bar {
+    background: var(--expense)
+}
+
+.day-label {
+    font-size: .62rem;
+    font-weight: 600;
+    color: var(--tg-text);
+}
+
+.day-date {
+    font-size: .55rem;
+    color: var(--tg-hint);
+}
+
+/* Income category bar fill */
+.cat-fill.income-fill {
+    background: linear-gradient(90deg, var(--income), #30d158);
+}
+
+/* Summary card */
+.summary-card {
+    background: var(--tg-section-bg);
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius);
+    padding: 14px;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--tg-section-separator);
+}
+
+.summary-row:last-child {
+    border-bottom: none
+}
+
+.summary-row.summary-net {
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+.summary-label {
+    font-size: .82rem;
+    color: var(--tg-hint);
+}
+
+.summary-value {
+    font-size: .85rem;
+    font-weight: 600;
+}
+
+.summary-value.income {
+    color: var(--income)
+}
+
+.summary-value.expense {
+    color: var(--expense)
+}

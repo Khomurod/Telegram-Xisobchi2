@@ -64,3 +64,7 @@ async function apiDeleteTransaction(id) {
         method: 'DELETE',
     });
 }
+
+async function apiGetReports() {
+    return apiFetch('/api/mini/reports');
+}

@@ -285,3 +285,100 @@ async def mini_delete_transaction(txn_id: int, request: Request):
     except Exception as e:
         logger.error(f"Mini delete transaction error: {e}", exc_info=True)
         return JSONResponse({"error": "delete failed"}, status_code=500)
+
+
+# ── GET /api/mini/reports ────────────────────────────────────
+
+@router.get("/reports")
+async def mini_reports(request: Request):
+    """
+    Report data for the Reports screen.
+
+    Returns:
+    - week:  totals (income/expense) for the last 7 days
+    - month: totals + category breakdown for current month
+    - daily: per-day income/expense for the last 7 days (for bar chart)
+    """
+    from datetime import datetime, timedelta
+
+    tg_user = await _get_tg_user(request)
+    if tg_user is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    telegram_id = tg_user["id"]
+
+    try:
+        async with async_session() as session:
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_telegram_id(telegram_id)
+
+            if not user:
+                return JSONResponse({
+                    "week": {"income_uzs": 0, "expense_uzs": 0, "income_usd": 0, "expense_usd": 0},
+                    "month": {"income_uzs": 0, "expense_uzs": 0, "income_usd": 0, "expense_usd": 0,
+                              "count": 0, "categories": []},
+                    "daily": [],
+                })
+
+            txn_repo = TransactionRepository(session)
+
+            # ── Week totals (last 7 days) ───────────────────
+            week_txns = await txn_repo.get_this_week(user.id)
+            week = {"income_uzs": 0.0, "expense_uzs": 0.0, "income_usd": 0.0, "expense_usd": 0.0}
+            for t in week_txns:
+                key = f"{t.type}_{t.currency.lower()}"
+                if key in week:
+                    week[key] += float(t.amount)
+
+            # ── Month totals + category breakdown ───────────
+            month_txns = await txn_repo.get_this_month(user.id)
+            month = {"income_uzs": 0.0, "expense_uzs": 0.0, "income_usd": 0.0, "expense_usd": 0.0}
+            for t in month_txns:
+                key = f"{t.type}_{t.currency.lower()}"
+                if key in month:
+                    month[key] += float(t.amount)
+
+            cat_rows = await txn_repo.get_month_by_category(user.id)
+            month_count = await txn_repo.count_this_month(user.id)
+            categories = [
+                {
+                    "category": cat,
+                    "category_emoji": CATEGORY_EMOJI.get(cat, "📦"),
+                    "category_name": CATEGORY_NAMES.get(cat, cat),
+                    "type": txn_type,
+                    "currency": currency,
+                    "total": float(total),
+                }
+                for cat, txn_type, currency, total in cat_rows
+            ]
+            month["count"] = month_count
+            month["categories"] = categories
+
+            # ── Daily breakdown for last 7 days ─────────────
+            now = datetime.now(UZT)
+            daily = []
+            for i in range(6, -1, -1):
+                day = now - timedelta(days=i)
+                day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day.replace(hour=23, minute=59, second=59, microsecond=999999)
+                day_txns = [
+                    t for t in week_txns
+                    if t.created_at and day_start <= t.created_at.astimezone(UZT) <= day_end
+                ]
+                income_uzs = sum(float(t.amount) for t in day_txns if t.type == "income" and t.currency == "UZS")
+                expense_uzs = sum(float(t.amount) for t in day_txns if t.type == "expense" and t.currency == "UZS")
+                daily.append({
+                    "date": day.strftime("%d.%m"),
+                    "weekday": ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"][day.weekday()],
+                    "income_uzs": income_uzs,
+                    "expense_uzs": expense_uzs,
+                })
+
+        return JSONResponse({
+            "week": week,
+            "month": month,
+            "daily": daily,
+        })
+    except Exception as e:
+        logger.error(f"Mini reports error: {e}", exc_info=True)
+        return JSONResponse({"error": "unavailable"}, status_code=500)
