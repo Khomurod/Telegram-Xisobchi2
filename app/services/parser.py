@@ -248,13 +248,140 @@ def _split_into_fragments(text: str) -> list[str]:
     return [p.strip() for p in parts if p and p.strip()]
 
 
+# ── Implicit splitting (no separators) ───────────────────────
+
+# Units that indicate a *quantity* rather than a monetary amount.
+# E.g. "2 ta non" = 2 loaves of bread, NOT 2 som.
+_QUANTITY_UNITS = {
+    "ta", "dona", "kg", "kilo", "gr", "gramm", "litr", "metr",
+    "pors", "quti", "paket", "banka", "butilka",
+    "marta", "kun", "oy", "yil", "soat", "daqiqa",
+    "kishi", "odam", "xil", "tur",
+    "штук", "шт", "кг", "литр",
+}
+
+# Currency hints that are part of an amount, not standalone words.
+_CURRENCY_TOKENS = {"so'm", "som", "dollar", "usd", "доллар"}
+
+# "yarim" (half) can be part of an amount: "yarim million", "bir yarim ming"
+_HALF_WORD = "yarim"
+
+
+def _is_amount_token(word: str) -> bool:
+    """Return True if *word* is a digit, number word, multiplier, or currency."""
+    if re.fullmatch(r'\d+(?:\.\d+)?', word):
+        return True
+    if word in NUMBER_WORDS or _strip_uzbek_suffix(word, NUMBER_WORDS) in NUMBER_WORDS:
+        return True
+    if word in MULTIPLIERS or _strip_uzbek_suffix(word) in MULTIPLIERS:
+        return True
+    if word in _CURRENCY_TOKENS:
+        return True
+    if word == _HALF_WORD:
+        return True
+    return False
+
+
+def _implicit_split(text: str) -> list[str]:
+    """Split text into fragments using amount-block boundaries.
+
+    When the user says something like:
+        "20 mingga kola 40 mingga fanta 15 mingga non"
+    there are no commas or conjunctions.  We detect three amount blocks
+    (contiguous runs of amount tokens) and use them to partition the string.
+
+    Returns the original text as a single-element list if fewer than 2 amount
+    blocks are found (i.e. no implicit splitting is possible).
+    """
+    tokens: list[tuple[str, int, int]] = []  # (word, start, end)
+    for m in re.finditer(r"\d+(?:\.\d+)?|[a-zA-Z\u0400-\u04FF'`]+", text):
+        tokens.append((m.group().lower(), m.start(), m.end()))
+
+    if not tokens:
+        return [text] if text.strip() else []
+
+    # Group contiguous amount tokens into blocks
+    blocks: list[tuple[list[int], int, int]] = []
+    i = 0
+    while i < len(tokens):
+        word = tokens[i][0]
+        if _is_amount_token(word):
+            block_indices = [i]
+            block_start = tokens[i][1]
+            block_end = tokens[i][2]
+            j = i + 1
+            while j < len(tokens) and _is_amount_token(tokens[j][0]):
+                block_indices.append(j)
+                block_end = tokens[j][2]
+                j += 1
+            blocks.append((block_indices, block_start, block_end))
+            i = j
+        else:
+            i += 1
+
+    # Filter out quantity blocks: if the token RIGHT AFTER the block is a
+    # quantity unit ("ta", "kg", etc.), this is a count, not money.
+    money_blocks: list[tuple[list[int], int, int]] = []
+    for block_indices, bstart, bend in blocks:
+        last_idx = block_indices[-1]
+        next_idx = last_idx + 1
+        if next_idx < len(tokens) and tokens[next_idx][0] in _QUANTITY_UNITS:
+            continue  # skip quantity like "2 ta"
+        money_blocks.append((block_indices, bstart, bend))
+
+    # Need at least 2 amount blocks to split
+    if len(money_blocks) < 2:
+        return [text] if text.strip() else []
+
+    # Determine pattern: does text start with an amount or with words?
+    first_block_start = money_blocks[0][1]
+    text_before_first = text[:first_block_start].strip()
+    amount_first = len(text_before_first) == 0
+
+    fragments: list[str] = []
+    for idx, (_, bstart, bend) in enumerate(money_blocks):
+        if amount_first:
+            # Pattern: AMOUNT ITEM AMOUNT ITEM ...
+            frag_start = bstart
+            if idx + 1 < len(money_blocks):
+                frag_end = money_blocks[idx + 1][1]
+            else:
+                frag_end = len(text)
+        else:
+            # Pattern: ITEM AMOUNT ITEM AMOUNT ...
+            # Each fragment: from end of previous amount block to end of this one.
+            # First fragment starts at text start; last fragment extends to text end.
+            if idx == 0:
+                frag_start = 0
+            else:
+                # Start right after the previous amount block ended
+                frag_start = money_blocks[idx - 1][2]
+                while frag_start < len(text) and text[frag_start] == ' ':
+                    frag_start += 1
+            if idx < len(money_blocks) - 1:
+                # End right at the end of this amount block
+                frag_end = bend
+            else:
+                # Last fragment gets everything to the end
+                frag_end = len(text)
+
+        frag = text[frag_start:frag_end].strip()
+        if frag:
+            fragments.append(frag)
+
+    return fragments if len(fragments) >= 2 else [text]
+
+
 # ── Public API ────────────────────────────────────────────────
 
 def parse_transactions(text: str) -> list[ParsedTransaction]:
     """Parse text that may contain multiple transactions.
 
-    Splits on commas, semicolons, and Uzbek/Russian conjunctions (va, ham,
-    yana, и, а также, etc.), then parses each fragment independently.
+    Pipeline:
+      1. Normalize text
+      2. Explicit split on commas, semicolons, conjunctions
+      3. For each explicit fragment, try implicit split on amount blocks
+      4. Parse each final fragment independently
 
     Returns a list of successfully parsed transactions (may be empty).
     """
@@ -262,11 +389,23 @@ def parse_transactions(text: str) -> list[ParsedTransaction]:
         return []
 
     normalized = _normalize_text(text)
-    fragments = _split_into_fragments(normalized)
-    logger.info(f"Splitting into {len(fragments)} fragment(s): {fragments}")
 
+    # Stage 1: explicit split (commas, "va", etc.)
+    explicit_frags = _split_into_fragments(normalized)
+    logger.info(f"Explicit split -> {len(explicit_frags)} fragment(s): {explicit_frags}")
+
+    # Stage 2: implicit split each explicit fragment
+    all_frags: list[str] = []
+    for frag in explicit_frags:
+        sub_frags = _implicit_split(frag)
+        all_frags.extend(sub_frags)
+
+    if len(all_frags) != len(explicit_frags):
+        logger.info(f"Implicit split expanded to {len(all_frags)} fragment(s): {all_frags}")
+
+    # Stage 3: parse each fragment
     results: list[ParsedTransaction] = []
-    for frag in fragments:
+    for frag in all_frags:
         parsed = _parse_single(frag, frag)
         if parsed:
             results.append(parsed)
@@ -277,7 +416,7 @@ def parse_transactions(text: str) -> list[ParsedTransaction]:
         if parsed:
             results.append(parsed)
 
-    logger.info(f"parse_transactions → {len(results)} transaction(s)")
+    logger.info(f"parse_transactions -> {len(results)} transaction(s)")
     return results
 
 
