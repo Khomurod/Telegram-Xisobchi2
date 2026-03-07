@@ -1,0 +1,820 @@
+/* ═══════════════════════════════════════════════════════════
+   Xisobchi Mini App — Mobile-first CSS
+   Uses Telegram themeParams as CSS custom properties
+   ═══════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0
+}
+
+:root {
+    /* Telegram theme — injected at runtime via telegram.js */
+    --tg-bg: #ffffff;
+    --tg-text: #000000;
+    --tg-hint: #999999;
+    --tg-link: #2481cc;
+    --tg-btn: #2481cc;
+    --tg-btn-text: #ffffff;
+    --tg-secondary-bg: #efeff3;
+    --tg-header-bg: #efeff3;
+    --tg-section-bg: #ffffff;
+    --tg-section-separator: #c8c7cc;
+    --tg-subtitle: #8e8e93;
+
+    /* App custom */
+    --income: #34c759;
+    --expense: #ff3b30;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --nav-height: 64px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--tg-bg);
+    color: var(--tg-text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+}
+
+body {
+    padding: 0 0 calc(var(--nav-height) + var(--safe-bottom) + 8px) 0;
+}
+
+/* ── Loading screen ──────────────────────────────────────── */
+.loading-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+    color: var(--tg-hint);
+    font-size: .88rem;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--tg-secondary-bg);
+    border-top-color: var(--tg-btn);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg)
+    }
+}
+
+/* ── Screen wrapper ──────────────────────────────────────── */
+.screen {
+    padding: 16px;
+    animation: fadeIn .25s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px)
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0)
+    }
+}
+
+/* ── Greeting ────────────────────────────────────────────── */
+.greeting {
+    padding: 4px 0 14px;
+}
+
+.greeting-hello {
+    font-size: .82rem;
+    color: var(--tg-hint);
+}
+
+.greeting-name {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    margin-top: 2px;
+}
+
+/* ── Balance cards ───────────────────────────────────────── */
+.balance-cards {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 4px;
+}
+
+.balance-card {
+    flex: 1;
+    min-width: 150px;
+    background: var(--tg-section-bg);
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius);
+    padding: 16px;
+    scroll-snap-align: start;
+    position: relative;
+    overflow: hidden;
+    transition: transform .15s;
+}
+
+.balance-card:active {
+    transform: scale(.97);
+}
+
+.balance-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+}
+
+.balance-card.uzs::before {
+    background: linear-gradient(90deg, #007aff, #5856d6)
+}
+
+.balance-card.usd::before {
+    background: linear-gradient(90deg, #34c759, #30d158)
+}
+
+.balance-card-flag {
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+}
+
+.balance-card-label {
+    font-size: .68rem;
+    color: var(--tg-hint);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+.balance-card-amount {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-top: 4px;
+}
+
+.balance-card-amount.positive {
+    color: var(--income)
+}
+
+.balance-card-amount.negative {
+    color: var(--expense)
+}
+
+.balance-card-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: .72rem;
+    color: var(--tg-hint);
+}
+
+.balance-card-row .income {
+    color: var(--income)
+}
+
+.balance-card-row .expense {
+    color: var(--expense)
+}
+
+/* ── Section ─────────────────────────────────────────────── */
+.section {
+    margin-bottom: 18px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.section-title {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--tg-hint);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+.section-link {
+    font-size: .78rem;
+    color: var(--tg-link);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* ── Transaction rows ────────────────────────────────────── */
+.txn-list {
+    background: var(--tg-section-bg);
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.txn-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--tg-section-separator);
+    transition: background .15s;
+}
+
+.txn-row:last-child {
+    border-bottom: none
+}
+
+.txn-row:active {
+    background: var(--tg-secondary-bg)
+}
+
+.txn-emoji {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--tg-secondary-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.txn-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.txn-cat {
+    font-size: .85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.txn-desc {
+    font-size: .72rem;
+    color: var(--tg-hint);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.txn-right {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.txn-amount {
+    font-size: .88rem;
+    font-weight: 700;
+}
+
+.txn-amount.income {
+    color: var(--income)
+}
+
+.txn-amount.expense {
+    color: var(--expense)
+}
+
+.txn-time {
+    font-size: .65rem;
+    color: var(--tg-hint);
+    margin-top: 2px;
+}
+
+/* ── Category bars (monthly) ─────────────────────────────── */
+.cat-list {
+    background: var(--tg-section-bg);
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius);
+    padding: 14px;
+}
+
+.cat-row {
+    margin-bottom: 12px;
+}
+
+.cat-row:last-child {
+    margin-bottom: 0
+}
+
+.cat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.cat-name {
+    font-size: .82rem;
+    font-weight: 500;
+}
+
+.cat-amount {
+    font-size: .78rem;
+    color: var(--tg-hint);
+}
+
+.cat-track {
+    height: 6px;
+    background: var(--tg-secondary-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.cat-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--tg-btn), #5856d6);
+    transition: width .8s cubic-bezier(.4, 0, .2, 1);
+    width: 0%;
+}
+
+.cat-fill.expense-fill {
+    background: linear-gradient(90deg, var(--expense), #ff6961);
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--tg-hint);
+    font-size: .85rem;
+}
+
+.empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+/* ── Filters (transactions page) ─────────────────────────── */
+.filter-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.filter-chip {
+    padding: 7px 16px;
+    font-size: .78rem;
+    font-weight: 500;
+    border-radius: 20px;
+    border: 1px solid var(--tg-section-separator);
+    background: var(--tg-section-bg);
+    color: var(--tg-text);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+    font-family: inherit;
+}
+
+.filter-chip:active {
+    transform: scale(.95)
+}
+
+.filter-chip.active {
+    background: var(--tg-btn);
+    color: var(--tg-btn-text);
+    border-color: var(--tg-btn);
+}
+
+/* ── Load more button ────────────────────────────────────── */
+.load-more {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-top: 12px;
+    background: var(--tg-section-bg);
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius-sm);
+    color: var(--tg-link);
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    font-family: inherit;
+    transition: background .15s;
+}
+
+.load-more:active {
+    background: var(--tg-secondary-bg)
+}
+
+/* ── Add transaction form ────────────────────────────────── */
+.form-section {
+    margin-bottom: 18px;
+}
+
+.form-label {
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--tg-hint);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+}
+
+/* Type toggle */
+.type-toggle {
+    display: flex;
+    gap: 0;
+    background: var(--tg-secondary-bg);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+}
+
+.type-btn {
+    flex: 1;
+    padding: 10px;
+    font-size: .85rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--tg-hint);
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+}
+
+.type-btn.active-expense {
+    background: var(--expense);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(255, 59, 48, .3);
+}
+
+.type-btn.active-income {
+    background: var(--income);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(52, 199, 89, .3);
+}
+
+/* Amount input */
+.amount-row {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.amount-input-wrap {
+    flex: 1;
+    position: relative;
+}
+
+.amount-input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 1.3rem;
+    font-weight: 700;
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius-sm);
+    background: var(--tg-section-bg);
+    color: var(--tg-text);
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.amount-input::placeholder {
+    color: var(--tg-hint)
+}
+
+.amount-input:focus {
+    outline: none;
+    border-color: var(--tg-btn)
+}
+
+/* Currency picker */
+.currency-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--tg-secondary-bg);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    min-width: 68px;
+}
+
+.currency-btn {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: .78rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--tg-hint);
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+}
+
+.currency-btn.active {
+    background: var(--tg-section-bg);
+    color: var(--tg-text);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+}
+
+/* Category grid */
+.category-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.cat-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 6px;
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius-sm);
+    background: var(--tg-section-bg);
+    cursor: pointer;
+    transition: all .15s;
+    font-family: inherit;
+}
+
+.cat-btn:active {
+    transform: scale(.95)
+}
+
+.cat-btn.active {
+    border-color: var(--tg-btn);
+    background: color-mix(in srgb, var(--tg-btn) 10%, transparent);
+}
+
+.cat-btn-emoji {
+    font-size: 1.3rem;
+}
+
+.cat-btn-label {
+    font-size: .65rem;
+    color: var(--tg-hint);
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.cat-btn.active .cat-btn-label {
+    color: var(--tg-btn);
+}
+
+/* Description input */
+.desc-input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: .88rem;
+    border: 1px solid var(--tg-section-separator);
+    border-radius: var(--radius-sm);
+    background: var(--tg-section-bg);
+    color: var(--tg-text);
+    font-family: inherit;
+    resize: none;
+    min-height: 48px;
+}
+
+.desc-input::placeholder {
+    color: var(--tg-hint)
+}
+
+.desc-input:focus {
+    outline: none;
+    border-color: var(--tg-btn)
+}
+
+/* Success animation */
+.success-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    animation: fadeIn .2s ease;
+}
+
+.success-card {
+    background: var(--tg-section-bg);
+    border-radius: 20px;
+    padding: 32px 40px;
+    text-align: center;
+    animation: bounceIn .3s ease;
+}
+
+.success-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+
+.success-text {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.success-amount {
+    font-size: .85rem;
+    color: var(--tg-hint);
+    margin-top: 4px;
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(.8);
+        opacity: 0
+    }
+
+    60% {
+        transform: scale(1.05)
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1
+    }
+}
+
+/* ── Bottom navigation ───────────────────────────────────── */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(var(--nav-height) + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+    background: var(--tg-section-bg);
+    border-top: 1px solid var(--tg-section-separator);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    z-index: 100;
+}
+
+.nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--tg-hint);
+    transition: color .2s;
+    font-family: inherit;
+}
+
+.nav-btn.active {
+    color: var(--tg-btn)
+}
+
+.nav-icon {
+    font-size: 1.3rem;
+}
+
+.nav-label {
+    font-size: .62rem;
+    font-weight: 500;
+}
+
+.nav-btn-add .nav-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--tg-btn);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: var(--tg-btn-text);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .15);
+    transition: transform .15s;
+}
+
+.nav-btn-add:active .nav-icon {
+    transform: scale(.9)
+}
+
+/* ── Pagination ──────────────────────────────────────────── */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: .8rem;
+    color: var(--tg-hint);
+}
+
+/* ── Delete confirm ──────────────────────────────────────── */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .4);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 200;
+    animation: fadeIn .15s ease;
+    padding-bottom: calc(var(--safe-bottom) + 12px);
+}
+
+.confirm-sheet {
+    background: var(--tg-section-bg);
+    border-radius: 16px;
+    padding: 20px;
+    width: calc(100% - 24px);
+    max-width: 400px;
+    animation: slideUp .2s ease;
+}
+
+.confirm-title {
+    font-size: .95rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.confirm-msg {
+    font-size: .82rem;
+    color: var(--tg-hint);
+    margin-bottom: 16px;
+}
+
+.confirm-btns {
+    display: flex;
+    gap: 10px;
+}
+
+.confirm-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: opacity .15s;
+}
+
+.confirm-btn:active {
+    opacity: .7
+}
+
+.confirm-cancel {
+    background: var(--tg-secondary-bg);
+    color: var(--tg-text)
+}
+
+.confirm-danger {
+    background: var(--expense);
+    color: #fff
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100%)
+    }
+
+    to {
+        transform: translateY(0)
+    }
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (min-width: 400px) {
+    .category-grid {
+        grid-template-columns: repeat(4, 1fr)
+    }
+}

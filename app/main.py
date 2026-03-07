@@ -12,6 +12,7 @@ from app.config import settings
 from app.database.connection import init_db, async_session
 from app.database.models import User, Transaction
 from app.utils.logger import setup_logger
+from app.mini_api import router as mini_router
 
 logger = setup_logger("main")
 
@@ -72,13 +73,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Xisobchi Bot", lifespan=lifespan)
 
-# CORS: restrict to dashboard origins
+# Register Mini App API router
+app.include_router(mini_router)
+
+# CORS: restrict to dashboard + mini app origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         os.getenv("DASHBOARD_ORIGIN", "https://xisobchi-dashboard.web.app"),
         "https://xisobchi-dashboard.web.app",
         "https://xisobchi-dashboard.firebaseapp.com",
+        os.getenv("MINIAPP_ORIGIN", "https://xisobchi-dashboard.web.app"),
     ],
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],

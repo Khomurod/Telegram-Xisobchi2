@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Xisobchi — Moliyaviy boshqaruv</title>
+    <meta name="description" content="Xisobchi Mini App — moliyaviy operatsiyalaringizni Telegram ichida boshqaring." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+    <link rel="stylesheet" href="css/mini.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+
+<body>
+
+    <!-- ── App container ──────────────────────────────────────── -->
+    <div id="app">
+        <div class="loading-screen" id="loading-screen">
+            <div class="loading-spinner"></div>
+            <p>Yuklanmoqda…</p>
+        </div>
+    </div>
+
+    <!-- ── Bottom tab navigation ──────────────────────────────── -->
+    <nav class="bottom-nav" id="bottom-nav">
+        <button class="nav-btn active" data-route="#/" id="nav-dashboard">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Bosh sahifa</span>
+        </button>
+        <button class="nav-btn" data-route="#/transactions" id="nav-transactions">
+            <span class="nav-icon">📝</span>
+            <span class="nav-label">Operatsiyalar</span>
+        </button>
+        <button class="nav-btn nav-btn-add" data-route="#/add" id="nav-add">
+            <span class="nav-icon">➕</span>
+            <span class="nav-label">Qo'shish</span>
+        </button>
+    </nav>
+
+    <!-- ── JS modules (order matters: telegram → api → screens → router → boot) ── -->
+    <script src="js/telegram.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/transactions.js"></script>
+    <script src="js/add.js"></script>
+    <script src="js/router.js"></script>
+
+</body>
+
+</html>
