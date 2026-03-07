@@ -51,7 +51,9 @@ async function loadDashboardData(container, hasCacheAlready) {
         const data = await apiGetDashboard();
         _setDashboardCache(data);
 
-        const screen = container.querySelector('#dashboard-screen') || container;
+        const screen = container.querySelector('#dashboard-screen');
+        if (!screen) return; // User navigated away, abort render
+
         const wrapper = document.createElement('div');
         buildDashboardHtml(wrapper, data);
         screen.outerHTML = wrapper.innerHTML;
@@ -60,7 +62,9 @@ async function loadDashboardData(container, hasCacheAlready) {
     } catch (err) {
         if (hasCacheAlready) return; // Silent fail if we already rendered cache
 
-        const screen = container.querySelector('#dashboard-screen') || container;
+        const screen = container.querySelector('#dashboard-screen');
+        if (!screen) return; // User navigated away, abort render
+
         screen.innerHTML = `
       <div class="screen">
         <div class="empty-state">
