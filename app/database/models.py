@@ -24,7 +24,7 @@ class User(Base):
     username = Column(String(255), nullable=True)
     phone_number = Column(String(20), nullable=True)
     telegram_first_name = Column(String(255), nullable=True)  # Telegram profile name (separate from typed name)
-    city = Column(String(50), nullable=True)  # Ramadan feature — Aladhan API city key
+    city = Column(String(50), nullable=True)  # User's city preference
     created_at = Column(DateTime(timezone=True), default=now_uzt)
 
     transactions = relationship("Transaction", back_populates="user", lazy="selectin", cascade="all, delete-orphan")

@@ -195,7 +195,6 @@ Dashboard (Firebase Hosting) ──► FastAPI REST API ──► Same DB
 | 3 | 🔴 | **Git Secrets:** `credentials.json` may exist in git history. | Verify & Rotate |
 | 4 | �🟡 | **Opaque Broadcast Failures:** Broadcast doesn't log *which* specific user IDs failed. | Pending Fix |
 | 5 | 🟡 | **Incomplete Health Check:** `/` health endpoint doesn't ping the PostgreSQL DB. | Pending Fix |
-| 6 | 🟡 | **Hardcoded Ramadan Data:** Timetable is hardcoded for 2026 (1447 AH) only. | Pending Fix (Required by 2027) |
 | 7 | 🟡 | **No Admin Pagination Bounds:** `/admin/users` accepts arbitrary `limit` with no max cap. | Pending Fix |
 | 8 | 🟡 | **aiohttp Session Per Request:** `speech_service.py` creates a new ClientSession per voice message. | Pending Fix |
 | 9 | 🟡 | **Memory-bound Confirmations:** Pending confirmations lost on instance restart. | Acceptable (5-min TTL) |

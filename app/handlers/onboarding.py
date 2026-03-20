@@ -49,9 +49,6 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
             KeyboardButton(text="📤 Export", style=ButtonStyle.SUCCESS),
         ],
         [
-            KeyboardButton(text="🌙 Ramazon", style=ButtonStyle.SUCCESS),
-        ],
-        [
             KeyboardButton(text="❓ Yordam"),
             KeyboardButton(text="🤝 Tavsiya"),
         ],
