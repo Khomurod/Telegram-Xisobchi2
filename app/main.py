@@ -13,6 +13,9 @@ from app.database.connection import init_db, async_session
 from app.database.models import User, Transaction
 from app.services.broadcaster import (
     generate_motivational_broadcast_text,
+    get_broadcast_pool_status,
+    reset_broadcast_pool_cursor,
+    save_broadcast_pool,
     send_broadcast_text,
     start_broadcaster,
     stop_broadcaster,
@@ -222,15 +225,56 @@ async def admin_broadcast(request: Request):
 
 @app.post("/admin/broadcast/generate")
 async def admin_generate_broadcast(request: Request):
-    """Generate a motivational broadcast draft. Protected by X-Admin-Token."""
+    """Preview the next scheduled broadcast draft. Protected by X-Admin-Token."""
     if not _check_admin(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     try:
         text = await generate_motivational_broadcast_text()
         return JSONResponse({"text": text})
     except Exception as e:
-        logger.error(f"Broadcast draft generation error: {e}", exc_info=True)
-        return JSONResponse({"error": "broadcast draft generation failed"}, status_code=500)
+        logger.error(f"Broadcast draft preview error: {e}", exc_info=True)
+        return JSONResponse({"error": "scheduled broadcast pool is empty"}, status_code=400)
+
+
+@app.get("/admin/broadcast/pool")
+async def admin_broadcast_pool(request: Request):
+    """Get the saved scheduled broadcast pool. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        return JSONResponse(await get_broadcast_pool_status())
+    except Exception as e:
+        logger.error(f"Broadcast pool load error: {e}", exc_info=True)
+        return JSONResponse({"error": "broadcast pool unavailable"}, status_code=500)
+
+
+@app.post("/admin/broadcast/pool")
+async def admin_save_broadcast_pool(request: Request):
+    """Save scheduled broadcast messages. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        body = await request.json()
+        raw_text = str(body.get("raw_text") or "")
+        schedule = body.get("schedule")
+        status = await save_broadcast_pool(raw_text, schedule=schedule)
+        return JSONResponse(status)
+    except Exception as e:
+        logger.error(f"Broadcast pool save error: {e}", exc_info=True)
+        return JSONResponse({"error": "broadcast pool save failed"}, status_code=500)
+
+
+@app.post("/admin/broadcast/pool/reset")
+async def admin_reset_broadcast_pool(request: Request):
+    """Reset the scheduled broadcast cursor to the first message. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        status = await reset_broadcast_pool_cursor()
+        return JSONResponse(status)
+    except Exception as e:
+        logger.error(f"Broadcast pool reset error: {e}", exc_info=True)
+        return JSONResponse({"error": "broadcast pool reset failed"}, status_code=500)
 
 
 @app.get("/admin/stats/daily")

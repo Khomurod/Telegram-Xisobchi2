@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Xisobchi Bot - Dashboard</title>
   <meta name="description"
-    content="Xisobchi Bot real-time admin dashboard - statistics, user management, broadcast messaging." />
+    content="Xisobchi Bot real-time admin dashboard - statistics, user management, scheduled broadcasts." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
@@ -16,7 +16,7 @@
 <body>
 
   <header>
-    <div class="logo">📊</div>
+    <div class="logo">XB</div>
     <div>
       <h1>Xisobchi Bot</h1>
       <p>Real-time statistics dashboard</p>
@@ -25,17 +25,17 @@
   </header>
 
   <div class="tabs">
-    <button class="tab active" data-tab="stats">📈 Statistika</button>
-    <button class="tab" data-tab="admin">🔐 Admin Panel</button>
+    <button class="tab active" data-tab="stats">Statistika</button>
+    <button class="tab" data-tab="admin">Admin Panel</button>
   </div>
 
   <div class="tab-panel active" id="tab-stats">
-    <div class="status-msg" id="loading">⏳ Loading stats...</div>
+    <div class="status-msg" id="loading">Loading stats...</div>
   </div>
 
   <div class="tab-panel" id="tab-admin">
     <div id="admin-gate" class="admin-login">
-      <h3 style="margin-bottom:16px;font-size:1.1rem">🔐 Admin kirish</h3>
+      <h3 style="margin-bottom:16px;font-size:1.1rem">Admin kirish</h3>
       <input type="password" id="admin-token" placeholder="Admin token kiriting..." />
       <button class="btn btn-primary" onclick="adminLogin()">Kirish</button>
       <p id="admin-err" style="color:var(--expense);margin-top:12px;font-size:.82rem;display:none"></p>
@@ -43,7 +43,7 @@
 
     <div id="admin-dash" style="display:none">
       <div class="box">
-        <div class="box-title">👥 Foydalanuvchilar</div>
+        <div class="box-title">Foydalanuvchilar</div>
         <table class="tbl" id="users-tbl">
           <thead>
             <tr>
@@ -62,16 +62,66 @@
       </div>
 
       <div class="box">
-        <div class="box-title">📣 Xabar yuborish (barcha foydalanuvchilarga)</div>
+        <div class="box-title">Rejalashtirilgan xabarlar pooli</div>
+        <p class="broadcast-helper">
+          Har bir xabarni bo'sh qator bilan ajrating. Scheduler har ishga tushganda navbatdagi xabarni oladi
+          va bir xil xabarni takrorlamaydi.
+        </p>
+        <div class="schedule-controls">
+          <label class="schedule-toggle">
+            <input type="checkbox" id="sp-enabled" checked onchange="toggleScheduledControls()" />
+            Avtomatik yuborish yoqilgan
+          </label>
+          <div class="schedule-time">
+            <label for="sp-time">Tashkent vaqti</label>
+            <input type="time" id="sp-time" value="09:00" />
+          </div>
+        </div>
+        <div class="schedule-days" id="sp-days">
+          <label class="schedule-day"><input type="checkbox" data-day="mon" checked /> Du</label>
+          <label class="schedule-day"><input type="checkbox" data-day="tue" /> Se</label>
+          <label class="schedule-day"><input type="checkbox" data-day="wed" checked /> Cho</label>
+          <label class="schedule-day"><input type="checkbox" data-day="thu" /> Pa</label>
+          <label class="schedule-day"><input type="checkbox" data-day="fri" checked /> Ju</label>
+          <label class="schedule-day"><input type="checkbox" data-day="sat" /> Sha</label>
+          <label class="schedule-day"><input type="checkbox" data-day="sun" /> Ya</label>
+        </div>
+        <textarea
+          class="broadcast-area broadcast-pool-area"
+          id="sp-text"
+          placeholder="1-xabarni yozing...
+
+2-xabarni yozing...
+
+3-xabarni yozing..."></textarea>
+        <div class="broadcast-meta">
+          <span id="sp-total">Jami 0 ta xabar</span>
+          <span id="sp-next">Keyingi: -</span>
+          <span id="sp-remaining">Qolgan: 0</span>
+          <span id="sp-next-run">Yuborish: -</span>
+        </div>
         <div class="broadcast-actions">
-          <button class="btn btn-primary" id="bc-generate-btn" onclick="generateBroadcastDraft()">✨ AI xabar yaratish</button>
-          <button class="btn" id="bc-preview-btn" onclick="previewBroadcast()">👀 Preview</button>
-          <button class="btn btn-success" id="bc-approve-btn" onclick="approveBroadcast()" disabled>✅ Tasdiqlash</button>
+          <button class="btn" onclick="loadScheduledPool()">Poolni yuklash</button>
+          <button class="btn btn-primary" onclick="saveScheduledPool()">Poolni saqlash</button>
+          <button class="btn btn-success" onclick="resetScheduledPoolCursor()">Navbatni boshidan boshlash</button>
+        </div>
+        <div class="broadcast-preview-wrap">
+          <div class="broadcast-preview-label">Keyingi scheduled xabar</div>
+          <div class="broadcast-preview empty" id="sp-preview">Keyingi scheduled xabar shu yerda ko'rinadi.</div>
+        </div>
+        <div id="sp-result" class="broadcast-result" style="display:none"></div>
+      </div>
+
+      <div class="box">
+        <div class="box-title">Bir martalik xabar yuborish</div>
+        <div class="broadcast-actions">
+          <button class="btn" id="bc-preview-btn" onclick="previewBroadcast()">Preview</button>
+          <button class="btn btn-success" id="bc-approve-btn" onclick="approveBroadcast()" disabled>Tasdiqlash</button>
         </div>
         <textarea
           class="broadcast-area"
           id="bc-text"
-          placeholder="Xabar matnini yozing... (HTML formatida)"
+          placeholder="Bir martalik xabar matnini yozing... (HTML formatida)"
           oninput="markBroadcastDirty()"></textarea>
         <div class="broadcast-meta">
           <span id="bc-count">Jami 0 ta foydalanuvchi</span>
@@ -82,7 +132,7 @@
           <div class="broadcast-preview empty" id="bc-preview">Preview shu yerda ko'rinadi.</div>
         </div>
         <div class="broadcast-send-row">
-          <button class="btn btn-success" id="bc-send-btn" onclick="sendBroadcast()" disabled>📣 Tasdiqlab yuborish</button>
+          <button class="btn btn-success" id="bc-send-btn" onclick="sendBroadcast()" disabled>Tasdiqlab yuborish</button>
         </div>
         <div id="bc-result" class="broadcast-result" style="display:none"></div>
       </div>
@@ -92,16 +142,16 @@
   <div class="panel-overlay" id="panel-overlay" onclick="closeUserPanel()"></div>
   <div class="panel" id="user-panel">
     <div class="panel-header">
-      <div class="panel-avatar" id="panel-avatar">👤</div>
+      <div class="panel-avatar" id="panel-avatar">U</div>
       <div>
         <div class="panel-name" id="panel-name">-</div>
         <div class="panel-meta" id="panel-meta">-</div>
       </div>
-      <button class="panel-close" onclick="closeUserPanel()">×</button>
+      <button class="panel-close" onclick="closeUserPanel()">x</button>
     </div>
     <div class="panel-body">
       <div class="panel-section">
-        <div class="panel-section-title">📊 Statistika</div>
+        <div class="panel-section-title">Statistika</div>
         <div class="stat-row">
           <div class="stat-chip">
             <div class="stat-chip-label">Jami operatsiya</div>
@@ -122,24 +172,24 @@
         </div>
       </div>
       <div class="panel-section">
-        <div class="panel-section-title">📝 So'nggi operatsiyalar</div>
+        <div class="panel-section-title">So'nggi operatsiyalar</div>
         <div id="panel-txns">
           <div style="color:var(--muted);font-size:.82rem">Yuklanmoqda...</div>
         </div>
       </div>
     </div>
     <div class="panel-footer">
-      <div class="panel-section-title" style="margin-bottom:8px">💬 Xabar yuborish</div>
+      <div class="panel-section-title" style="margin-bottom:8px">Foydalanuvchiga xabar</div>
       <textarea class="dm-area" id="dm-text" placeholder="Foydalanuvchiga Telegram xabar yozing..."></textarea>
       <div style="display:flex;align-items:center;gap:10px">
-        <button class="btn btn-primary" style="flex:1" onclick="sendDirectMessage()">📨 Yuborish</button>
+        <button class="btn btn-primary" style="flex:1" onclick="sendDirectMessage()">Yuborish</button>
         <span id="dm-status" style="font-size:.78rem;color:var(--muted)"></span>
       </div>
     </div>
   </div>
 
   <footer>
-    Built with ❤ · Powered by
+    Built with care · Powered by
     <a href="https://neon.tech" target="_blank">Neon</a> &amp;
     <a href="https://render.com" target="_blank">Render</a>
   </footer>

@@ -1,6 +1,6 @@
 /**
- * admin.js - Admin panel: login, user list, delete, broadcast draft workflow.
- * Depends on: config.js (API, fmt)
+ * admin.js - Admin panel: login, user list, scheduled broadcast pool, manual broadcast.
+ * Depends on: config.js (API)
  * Calls into: panel.js (openUser, closeUserPanel)
  */
 
@@ -8,6 +8,7 @@ let adminToken = sessionStorage.getItem('admin_token') || '';
 let currentPage = 1;
 let broadcastPreviewSnapshot = '';
 let broadcastApproved = false;
+const SCHEDULE_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 
 function currentBroadcastText() {
@@ -15,8 +16,13 @@ function currentBroadcastText() {
 }
 
 
-function setBroadcastResult(message, tone = 'info') {
-    const result = document.getElementById('bc-result');
+function pad2(value) {
+    return String(value).padStart(2, '0');
+}
+
+
+function setResultBox(elementId, message, tone = 'info') {
+    const result = document.getElementById(elementId);
     const tones = {
         info: 'display:block;background:rgba(88,166,255,.1);color:var(--accent)',
         success: 'display:block;background:rgba(63,185,80,.15);color:var(--income)',
@@ -28,10 +34,28 @@ function setBroadcastResult(message, tone = 'info') {
 }
 
 
+function setBroadcastResult(message, tone = 'info') {
+    setResultBox('bc-result', message, tone);
+}
+
+
+function setScheduledResult(message, tone = 'info') {
+    setResultBox('sp-result', message, tone);
+}
+
+
 function setBroadcastPreview(html = '', empty = false) {
     const preview = document.getElementById('bc-preview');
     preview.classList.toggle('empty', empty);
     preview.innerHTML = empty ? 'Preview shu yerda ko\'rinadi.' : html;
+}
+
+
+function setScheduledPreview(text = '') {
+    const preview = document.getElementById('sp-preview');
+    const clean = (text || '').trim();
+    preview.classList.toggle('empty', !clean);
+    preview.textContent = clean || 'Keyingi scheduled xabar shu yerda ko\'rinadi.';
 }
 
 
@@ -79,6 +103,24 @@ function resetBroadcastComposer() {
 }
 
 
+function resetScheduledPoolPanel() {
+    document.getElementById('sp-text').value = '';
+    document.getElementById('sp-enabled').checked = true;
+    document.getElementById('sp-time').value = '09:00';
+    document.querySelectorAll('#sp-days input[type="checkbox"]').forEach(input => {
+        input.checked = ['mon', 'wed', 'fri'].includes(input.dataset.day);
+    });
+    document.getElementById('sp-total').textContent = 'Jami 0 ta xabar';
+    document.getElementById('sp-next').textContent = 'Keyingi: -';
+    document.getElementById('sp-remaining').textContent = 'Qolgan: 0';
+    document.getElementById('sp-next-run').textContent = 'Yuborish: -';
+    document.getElementById('sp-result').style.display = 'none';
+    document.getElementById('sp-result').textContent = '';
+    setScheduledPreview('');
+    toggleScheduledControls();
+}
+
+
 function markBroadcastDirty() {
     const text = currentBroadcastText();
     if (!text) {
@@ -89,6 +131,78 @@ function markBroadcastDirty() {
         broadcastApproved = false;
     }
     updateBroadcastApproval();
+}
+
+
+function formatScheduledNextRun(iso) {
+    if (!iso) return '-';
+    try {
+        return new Intl.DateTimeFormat('uz-UZ', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'Asia/Tashkent',
+        }).format(new Date(iso));
+    } catch (e) {
+        return iso;
+    }
+}
+
+
+function readScheduledForm() {
+    const enabled = document.getElementById('sp-enabled').checked;
+    const timeValue = document.getElementById('sp-time').value || '09:00';
+    const [hourText, minuteText] = timeValue.split(':');
+    const days = SCHEDULE_DAYS.filter(day => {
+        const input = document.querySelector(`#sp-days input[data-day="${day}"]`);
+        return !!input && input.checked;
+    });
+
+    return {
+        enabled,
+        days,
+        hour: Number.parseInt(hourText || '9', 10),
+        minute: Number.parseInt(minuteText || '0', 10),
+    };
+}
+
+
+function toggleScheduledControls() {
+    const enabled = document.getElementById('sp-enabled').checked;
+    document.getElementById('sp-time').disabled = !enabled;
+    document.querySelectorAll('#sp-days input[type="checkbox"]').forEach(input => {
+        input.disabled = !enabled;
+    });
+}
+
+
+function applyScheduledPoolStatus(status) {
+    const messages = Array.isArray(status.messages) ? status.messages : [];
+    const schedule = status.schedule || {};
+    const selectedDays = Array.isArray(schedule.days) ? schedule.days : [];
+    let nextRunLabel = 'Yuborish: -';
+
+    if (!schedule.enabled) {
+        nextRunLabel = 'Yuborish: pauzada';
+    } else if (!selectedDays.length) {
+        nextRunLabel = 'Yuborish: kun tanlanmagan';
+    } else if (status.next_run_at) {
+        nextRunLabel = `Yuborish: ${formatScheduledNextRun(status.next_run_at)}`;
+    }
+
+    document.getElementById('sp-text').value = messages.join('\n\n');
+    document.getElementById('sp-enabled').checked = !!schedule.enabled;
+    document.getElementById('sp-time').value = `${pad2(schedule.hour ?? 9)}:${pad2(schedule.minute ?? 0)}`;
+    document.querySelectorAll('#sp-days input[type="checkbox"]').forEach(input => {
+        input.checked = selectedDays.includes(input.dataset.day);
+    });
+    document.getElementById('sp-total').textContent = `Jami ${status.total || 0} ta xabar`;
+    document.getElementById('sp-next').textContent = status.next_position
+        ? `Keyingi: ${status.next_position}`
+        : 'Keyingi: -';
+    document.getElementById('sp-remaining').textContent = `Qolgan: ${status.remaining || 0}`;
+    document.getElementById('sp-next-run').textContent = nextRunLabel;
+    setScheduledPreview(status.next_message || '');
+    toggleScheduledControls();
 }
 
 
@@ -125,7 +239,9 @@ async function adminLogin() {
         document.getElementById('admin-gate').style.display = 'none';
         document.getElementById('admin-dash').style.display = 'block';
         resetBroadcastComposer();
-        loadUsers(1);
+        resetScheduledPoolPanel();
+        await loadUsers(1);
+        await loadScheduledPool(false);
     } catch (e) {
         err.textContent = 'Server xatoligi: ' + e.message;
         err.style.display = 'block';
@@ -139,6 +255,7 @@ function adminLogout() {
     document.getElementById('admin-gate').style.display = 'block';
     document.getElementById('admin-dash').style.display = 'none';
     resetBroadcastComposer();
+    resetScheduledPoolPanel();
 }
 
 
@@ -169,19 +286,93 @@ async function loadUsers(page = 1) {
         <td onclick="event.stopPropagation()" style="white-space:nowrap">
           <button class="btn btn-danger btn-small"
             onclick="deleteUser(${u.telegram_id}, '${(u.first_name || u.telegram_id).replace(/'/g, '')}')"
-            title="O'chirish">🗑</button>
+            title="O'chirish">O'chir</button>
         </td>
       </tr>`).join('');
 
         document.getElementById('bc-count').textContent = `Jami ${d.total} ta foydalanuvchi`;
 
         let phtml = '';
-        if (page > 1) phtml += `<button class="btn btn-primary btn-small" onclick="loadUsers(${page - 1})">← Oldingi</button>`;
+        if (page > 1) phtml += `<button class="btn btn-primary btn-small" onclick="loadUsers(${page - 1})">Oldingi</button>`;
         phtml += `<span>${page} / ${totalPages}</span>`;
-        if (page < totalPages) phtml += `<button class="btn btn-primary btn-small" onclick="loadUsers(${page + 1})">Keyingi →</button>`;
+        if (page < totalPages) phtml += `<button class="btn btn-primary btn-small" onclick="loadUsers(${page + 1})">Keyingi</button>`;
         pages.innerHTML = phtml;
     } catch (e) {
         body.innerHTML = `<tr><td colspan="7" style="color:var(--expense)">Xatolik: ${e.message}</td></tr>`;
+    }
+}
+
+
+async function loadScheduledPool(showStatus = true) {
+    try {
+        const res = await fetch(`${API}/admin/broadcast/pool`, {
+            headers: { 'X-Admin-Token': adminToken },
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) {
+            throw new Error(d.error || res.status);
+        }
+
+        applyScheduledPoolStatus(d);
+        if (showStatus) {
+            setScheduledResult('Scheduled pool yuklandi.', 'success');
+        }
+    } catch (e) {
+        setScheduledResult('Xatolik: ' + e.message, 'error');
+    }
+}
+
+
+async function saveScheduledPool() {
+    const rawText = document.getElementById('sp-text').value;
+    const schedule = readScheduledForm();
+
+    if (schedule.enabled && !schedule.days.length) {
+        setScheduledResult('Avtomatik yuborish yoqilgan, lekin hech qaysi kun tanlanmagan.', 'warning');
+        return;
+    }
+
+    setScheduledResult('Scheduled pool saqlanmoqda...', 'info');
+
+    try {
+        const res = await fetch(`${API}/admin/broadcast/pool`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+            body: JSON.stringify({ raw_text: rawText, schedule }),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) {
+            throw new Error(d.error || res.status);
+        }
+
+        applyScheduledPoolStatus(d);
+        setScheduledResult(
+            `Pool saqlandi. Jami ${d.total} ta xabar, qolgan ${d.remaining} ta.`,
+            'success',
+        );
+    } catch (e) {
+        setScheduledResult('Xatolik: ' + e.message, 'error');
+    }
+}
+
+
+async function resetScheduledPoolCursor() {
+    setScheduledResult('Scheduled navbat boshiga qaytarilmoqda...', 'info');
+
+    try {
+        const res = await fetch(`${API}/admin/broadcast/pool/reset`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': adminToken },
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) {
+            throw new Error(d.error || res.status);
+        }
+
+        applyScheduledPoolStatus(d);
+        setScheduledResult('Scheduled navbat boshiga qaytarildi.', 'success');
+    } catch (e) {
+        setScheduledResult('Xatolik: ' + e.message, 'error');
     }
 }
 
@@ -211,40 +402,10 @@ async function deleteUser(telegramId, displayName) {
 }
 
 
-async function generateBroadcastDraft() {
-    const btn = document.getElementById('bc-generate-btn');
-    btn.disabled = true;
-    setBroadcastResult('AI draft tayyorlanmoqda...', 'info');
-
-    try {
-        const res = await fetch(`${API}/admin/broadcast/generate`, {
-            method: 'POST',
-            headers: { 'X-Admin-Token': adminToken },
-        });
-        const d = await res.json();
-        if (!res.ok || d.error) {
-            setBroadcastResult('⚠️ ' + (d.error || res.status), 'error');
-            return;
-        }
-
-        document.getElementById('bc-text').value = d.text || '';
-        broadcastPreviewSnapshot = '';
-        broadcastApproved = false;
-        setBroadcastPreview('', true);
-        updateBroadcastApproval();
-        setBroadcastResult('Draft tayyor. Endi preview qilib, tasdiqlang.', 'success');
-    } catch (e) {
-        setBroadcastResult('⚠️ ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-
 function previewBroadcast() {
     const text = currentBroadcastText();
     if (!text) {
-        setBroadcastResult('⚠️ Avval xabar matnini kiriting.', 'warning');
+        setBroadcastResult('Avval xabar matnini kiriting.', 'warning');
         return;
     }
 
@@ -259,32 +420,32 @@ function previewBroadcast() {
 function approveBroadcast() {
     const text = currentBroadcastText();
     if (!text) {
-        setBroadcastResult('⚠️ Avval xabar matnini kiriting.', 'warning');
+        setBroadcastResult('Avval xabar matnini kiriting.', 'warning');
         return;
     }
     if (!broadcastPreviewSnapshot || broadcastPreviewSnapshot !== text) {
-        setBroadcastResult('⚠️ Tasdiqlashdan oldin yangi preview qiling.', 'warning');
+        setBroadcastResult('Tasdiqlashdan oldin yangi preview qiling.', 'warning');
         return;
     }
 
     broadcastApproved = true;
     updateBroadcastApproval();
-    setBroadcastResult('✅ Xabar tasdiqlandi. Endi yuborish mumkin.', 'success');
+    setBroadcastResult('Xabar tasdiqlandi. Endi yuborish mumkin.', 'success');
 }
 
 
 async function sendBroadcast() {
     const text = currentBroadcastText();
     if (!text) {
-        setBroadcastResult('⚠️ Xabar matnini yozing.', 'warning');
+        setBroadcastResult('Xabar matnini yozing.', 'warning');
         return;
     }
     if (!broadcastPreviewSnapshot || broadcastPreviewSnapshot !== text) {
-        setBroadcastResult('⚠️ Yuborishdan oldin preview yangilanishi kerak.', 'warning');
+        setBroadcastResult('Yuborishdan oldin preview yangilanishi kerak.', 'warning');
         return;
     }
     if (!broadcastApproved) {
-        setBroadcastResult('⚠️ Avval previewni tasdiqlang.', 'warning');
+        setBroadcastResult('Avval previewni tasdiqlang.', 'warning');
         return;
     }
 
@@ -293,7 +454,7 @@ async function sendBroadcast() {
 
     const sendBtn = document.getElementById('bc-send-btn');
     sendBtn.disabled = true;
-    setBroadcastResult('📤 Yuborilmoqda...', 'info');
+    setBroadcastResult('Yuborilmoqda...', 'info');
 
     try {
         const res = await fetch(`${API}/admin/broadcast`, {
@@ -303,14 +464,13 @@ async function sendBroadcast() {
         });
         const d = await res.json();
         if (!res.ok || d.error) {
-            setBroadcastResult('⚠️ ' + (d.error || res.status), 'error');
-            return;
+            throw new Error(d.error || res.status);
         }
 
         resetBroadcastComposer();
-        setBroadcastResult(`✅ Yuborildi: ${d.sent} ta | ❌ Xato: ${d.failed} ta`, 'success');
+        setBroadcastResult(`Yuborildi: ${d.sent} ta | Xato: ${d.failed} ta`, 'success');
     } catch (e) {
-        setBroadcastResult('⚠️ ' + e.message, 'error');
+        setBroadcastResult('Xatolik: ' + e.message, 'error');
     } finally {
         updateBroadcastApproval();
     }

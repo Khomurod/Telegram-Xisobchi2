@@ -100,6 +100,16 @@ header p { font-size: .82rem; color: var(--muted); margin-top: 2px }
 .tbl-pages span { color: var(--muted); font-size: .8rem }
 
 /* ── Broadcast ───────────────────────────────────────────── */
+.broadcast-helper { margin-bottom: 14px; color: var(--muted); font-size: .82rem; line-height: 1.55 }
+.broadcast-pool-area { min-height: 220px }
+.schedule-controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 12px }
+.schedule-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--text) }
+.schedule-toggle input { accent-color: var(--accent) }
+.schedule-time { display: flex; align-items: center; gap: 10px; font-size: .78rem; color: var(--muted) }
+.schedule-time input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-family: inherit }
+.schedule-days { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px }
+.schedule-day { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; background: rgba(255,255,255,.03); font-size: .78rem; color: var(--text) }
+.schedule-day input { accent-color: var(--accent) }
 .broadcast-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px }
 .broadcast-area { width: 100%; min-height: 100px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px; font-size: .9rem; font-family: inherit; resize: vertical; margin-bottom: 12px }
 .broadcast-area::placeholder { color: var(--muted) }
@@ -158,6 +168,8 @@ footer a      { color: var(--accent); text-decoration: none }
   .cards { grid-template-columns: 1fr 1fr }
   .card-value { font-size: 1.4rem }
   .stat-row { grid-template-columns: 1fr }
+  .schedule-controls { flex-direction: column; align-items: flex-start }
+  .schedule-time { width: 100%; justify-content: space-between }
   .broadcast-actions { flex-direction: column }
   .broadcast-meta { flex-direction: column; align-items: flex-start }
   .broadcast-send-row { flex-direction: column; align-items: stretch }
