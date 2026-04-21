@@ -31,6 +31,19 @@ class Settings:
             return raw.replace("postgresql://", "postgresql+asyncpg://", 1)
         return raw
 
+    # Yandex Cloud
+    YANDEX_API_KEY: str = os.getenv("YANDEX_API_KEY", "")
+    YANDEX_FOLDER_ID: str = os.getenv("YANDEX_FOLDER_ID", "")
+    YANDEX_GPT_MODEL: str = os.getenv("YANDEX_GPT_MODEL", "yandexgpt")
+    YANDEX_GPT_VERSION: str = os.getenv("YANDEX_GPT_VERSION", "latest")
+    YANDEX_API_TIMEOUT_SECONDS: float = float(os.getenv("YANDEX_API_TIMEOUT_SECONDS", "30"))
+
+    @property
+    def YANDEX_GPT_MODEL_URI(self) -> str:
+        if not self.YANDEX_FOLDER_ID:
+            return ""
+        return f"gpt://{self.YANDEX_FOLDER_ID}/{self.YANDEX_GPT_MODEL}/{self.YANDEX_GPT_VERSION}"
+
 
 
     # Voice limits

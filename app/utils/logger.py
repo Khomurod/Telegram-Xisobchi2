@@ -11,7 +11,14 @@ def setup_logger(name: str, level: str = None) -> logging.Logger:
     logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
+        stream = sys.stdout
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+            except ValueError:
+                pass
+
+        handler = logging.StreamHandler(stream)
         handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
         formatter = logging.Formatter(
             "%(asctime)s | %(name)-18s | %(levelname)-7s | %(message)s",

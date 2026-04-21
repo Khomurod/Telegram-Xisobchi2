@@ -398,7 +398,7 @@ async def demo_text(message: Message, state: FSMContext):
     """Parse user text in demo mode — show result but don't save."""
     from app.services.parser import parse_transaction
     raw = message.text.strip()
-    parsed = parse_transaction(raw)
+    parsed = await parse_transaction(raw)
     await _show_demo_result(message, state, parsed, raw)
 
 
@@ -426,7 +426,7 @@ async def demo_voice(message: Message, state: FSMContext):
             return
 
         await message.answer(f"📝 *Eshitildi:* _{result.text}_", parse_mode="Markdown")
-        parsed = parse_transaction(result.text)
+        parsed = await parse_transaction(result.text)
         await _show_demo_result(message, state, parsed, result.text)
 
     except RuntimeError:

@@ -48,7 +48,7 @@ async def handle_text(message: types.Message):
         return
 
     # Try to parse as transaction(s)
-    parsed_list = parse_transactions(text)
+    parsed_list = await parse_transactions(text)
 
     if not parsed_list:
         # Not a transaction — silently ignore to avoid annoying the user

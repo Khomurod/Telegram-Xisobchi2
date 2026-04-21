@@ -30,7 +30,7 @@ class TransactionService:
         """
         user = await self.user_repo.get_or_create(telegram_id, first_name, username)
 
-        parsed = parse_transaction(text)
+        parsed = await parse_transaction(text)
         if not parsed:
             logger.warning(f"Parse failed for user {telegram_id}: '{text}'")
             return {"success": False, "error": "parse_failed"}

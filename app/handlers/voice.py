@@ -112,7 +112,7 @@ async def handle_voice(message: types.Message, bot: Bot):
             return
 
         # Step 4: Parse transaction(s) — supports multiple in one message
-        parsed_list = parse_transactions(result.text)
+        parsed_list = await parse_transactions(result.text)
 
         if not parsed_list:
             await processing_msg.edit_text(

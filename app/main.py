@@ -11,6 +11,9 @@ from app.bot import bot, dp
 from app.config import settings
 from app.database.connection import init_db, async_session
 from app.database.models import User, Transaction
+from app.services.broadcaster import start_broadcaster, stop_broadcaster
+from app.services.speech_service import close_speech_session
+from app.services.yandex_gpt import close_yandex_gpt_client
 from app.utils.logger import setup_logger
 from app.mini_api import router as mini_router
 
@@ -56,6 +59,8 @@ async def lifespan(app: FastAPI):
         ping_task = asyncio.create_task(ping_loop())
         logger.info(f"Cross-ping started → {settings.PING_TARGET_URL}")
 
+    await start_broadcaster()
+
     yield
 
     # Shutdown
@@ -65,6 +70,9 @@ async def lifespan(app: FastAPI):
             await ping_task
         except asyncio.CancelledError:
             pass
+    await stop_broadcaster()
+    await close_yandex_gpt_client()
+    await close_speech_session()
     # Don't delete webhook on shutdown — Railway redeploys cause a race
     # condition where the old container deletes it after the new one sets it.
     await bot.session.close()
@@ -361,11 +369,16 @@ async def start_polling():
     except Exception as e:
         logger.warning(f"DB warmup query failed (non-fatal): {e}")
 
+    await start_broadcaster()
+
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Bot is running! Press Ctrl+C to stop.")
     try:
         await dp.start_polling(bot)
     finally:
+        await stop_broadcaster()
+        await close_yandex_gpt_client()
+        await close_speech_session()
         await bot.session.close()
         logger.info("Bot session closed")
 
