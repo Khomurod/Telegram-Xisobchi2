@@ -30,7 +30,7 @@ _scheduler: AsyncIOScheduler | None = None
 _scheduler_lock = asyncio.Lock()
 
 
-async def _build_broadcast_text() -> str:
+async def generate_motivational_broadcast_text() -> str:
     client = get_yandex_gpt_client()
     generated_text = await client.generate_text(
         _BROADCAST_PROMPT,
@@ -40,41 +40,52 @@ async def _build_broadcast_text() -> str:
     return f"{escape(generated_text.strip())}{_BROADCAST_CTA}"
 
 
-async def run_motivational_broadcast() -> None:
-    logger.info("[Scheduler] Motivational broadcast started.")
-
-    try:
-        final_text = await _build_broadcast_text()
-        async with async_session() as session:
-            user_repo = UserRepository(session)
-            telegram_ids = await user_repo.get_all_users()
-    except Exception:
-        logger.error("[Scheduler] Motivational broadcast setup failed.", exc_info=True)
-        return
+async def send_broadcast_text(text: str, *, log_prefix: str = "[Broadcast]") -> dict[str, int]:
+    async with async_session() as session:
+        user_repo = UserRepository(session)
+        telegram_ids = await user_repo.get_all_users()
 
     success_count = 0
     failure_count = 0
-    logger.info("[Scheduler] Broadcasting motivational message to %s users.", len(telegram_ids))
+    logger.info("%s Broadcast started for %s users.", log_prefix, len(telegram_ids))
 
     for tg_id in telegram_ids:
         try:
             await bot.send_message(
                 chat_id=tg_id,
-                text=final_text,
+                text=text,
                 parse_mode="HTML",
             )
             success_count += 1
         except Exception:
             failure_count += 1
-            logger.error("[Scheduler] Failed to send motivational message to %s.", tg_id, exc_info=True)
+            logger.error("%s Failed to send message to %s.", log_prefix, tg_id, exc_info=True)
 
         await asyncio.sleep(0.05)
 
     logger.info(
-        "[Scheduler] Motivational broadcast finished. successes=%s failures=%s",
+        "%s Broadcast finished. successes=%s failures=%s",
+        log_prefix,
         success_count,
         failure_count,
     )
+    return {
+        "sent": success_count,
+        "failed": failure_count,
+        "total": len(telegram_ids),
+    }
+
+
+async def run_motivational_broadcast() -> None:
+    logger.info("[Scheduler] Motivational broadcast started.")
+
+    try:
+        final_text = await generate_motivational_broadcast_text()
+    except Exception:
+        logger.error("[Scheduler] Motivational broadcast setup failed.", exc_info=True)
+        return
+
+    await send_broadcast_text(final_text, log_prefix="[Scheduler]")
 
 
 async def start_broadcaster() -> None:

@@ -80,12 +80,13 @@ header p { font-size: .82rem; color: var(--muted); margin-top: 2px }
 .admin-login input::placeholder { color: var(--muted) }
 
 /* ── Buttons ─────────────────────────────────────────────── */
-.btn         { border: none; border-radius: 8px; padding: 8px 20px; font-size: .85rem; cursor: pointer; font-family: inherit; font-weight: 500; transition: opacity .2s }
+.btn         { border: none; border-radius: 8px; padding: 8px 20px; font-size: .85rem; cursor: pointer; font-family: inherit; font-weight: 500; transition: opacity .2s; background: rgba(255,255,255,.08); color: var(--text) }
 .btn:hover   { opacity: .85 }
 .btn-primary { background: var(--accent); color: #fff }
 .btn-danger  { background: var(--expense); color: #fff }
 .btn-success { background: var(--income); color: #fff }
 .btn-small   { padding: 6px 14px; font-size: .78rem }
+.btn:disabled { cursor: not-allowed; opacity: .45 }
 
 /* ── Users table ─────────────────────────────────────────── */
 .tbl    { width: 100%; border-collapse: collapse; font-size: .82rem }
@@ -99,8 +100,20 @@ header p { font-size: .82rem; color: var(--muted); margin-top: 2px }
 .tbl-pages span { color: var(--muted); font-size: .8rem }
 
 /* ── Broadcast ───────────────────────────────────────────── */
+.broadcast-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px }
 .broadcast-area { width: 100%; min-height: 100px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px; font-size: .9rem; font-family: inherit; resize: vertical; margin-bottom: 12px }
 .broadcast-area::placeholder { color: var(--muted) }
+.broadcast-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; font-size: .78rem; color: var(--muted) }
+.broadcast-approval { border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-weight: 600 }
+.broadcast-approval.pending { color: var(--gold); background: rgba(210,153,34,.14) }
+.broadcast-approval.ready { color: var(--accent); background: rgba(88,166,255,.12) }
+.broadcast-approval.approved { color: var(--income); background: rgba(63,185,80,.14) }
+.broadcast-preview-wrap { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: rgba(255,255,255,.03); margin-bottom: 12px }
+.broadcast-preview-label { font-size: .72rem; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px }
+.broadcast-preview { min-height: 88px; background: var(--bg); border: 1px dashed rgba(255,255,255,.12); border-radius: 8px; padding: 14px; font-size: .92rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word }
+.broadcast-preview.empty { color: var(--muted) }
+.broadcast-preview a { color: var(--accent); text-decoration: none }
+.broadcast-send-row { display: flex; align-items: center; gap: 12px }
 .broadcast-result { margin-top: 12px; font-size: .85rem; padding: 10px; border-radius: 8px }
 
 /* ── Misc ────────────────────────────────────────────────── */
@@ -140,3 +153,12 @@ footer a      { color: var(--accent); text-decoration: none }
 .panel-footer { padding: 16px 22px; border-top: 1px solid var(--border); flex-shrink: 0 }
 .dm-area { width: 100%; min-height: 72px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px 12px; font-size: .88rem; font-family: inherit; resize: none; margin-bottom: 10px }
 .dm-area::placeholder { color: var(--muted) }
+
+@media (max-width: 640px) {
+  .cards { grid-template-columns: 1fr 1fr }
+  .card-value { font-size: 1.4rem }
+  .stat-row { grid-template-columns: 1fr }
+  .broadcast-actions { flex-direction: column }
+  .broadcast-meta { flex-direction: column; align-items: flex-start }
+  .broadcast-send-row { flex-direction: column; align-items: stretch }
+}

@@ -11,7 +11,12 @@ from app.bot import bot, dp
 from app.config import settings
 from app.database.connection import init_db, async_session
 from app.database.models import User, Transaction
-from app.services.broadcaster import start_broadcaster, stop_broadcaster
+from app.services.broadcaster import (
+    generate_motivational_broadcast_text,
+    send_broadcast_text,
+    start_broadcaster,
+    stop_broadcaster,
+)
 from app.services.speech_service import close_speech_session
 from app.services.yandex_gpt import close_yandex_gpt_client
 from app.utils.logger import setup_logger
@@ -208,23 +213,24 @@ async def admin_broadcast(request: Request):
         return JSONResponse({"error": "message too long (max 4096 chars)"}, status_code=400)
 
     try:
-        async with async_session() as session:
-            rows = (await session.execute(select(User.telegram_id))).scalars().all()
-
-        sent = failed = 0
-        for tg_id in rows:
-            try:
-                await bot.send_message(chat_id=tg_id, text=text, parse_mode="HTML")
-                sent += 1
-                await asyncio.sleep(0.05)  # Throttle: stay under Telegram 30 msg/s limit
-            except Exception:
-                failed += 1
-
-        logger.info(f"Broadcast: sent={sent} failed={failed}")
-        return JSONResponse({"sent": sent, "failed": failed})
+        result = await send_broadcast_text(text, log_prefix="[Admin Broadcast]")
+        return JSONResponse(result)
     except Exception as e:
         logger.error(f"Broadcast error: {e}", exc_info=True)
         return JSONResponse({"error": "broadcast failed"}, status_code=500)
+
+
+@app.post("/admin/broadcast/generate")
+async def admin_generate_broadcast(request: Request):
+    """Generate a motivational broadcast draft. Protected by X-Admin-Token."""
+    if not _check_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        text = await generate_motivational_broadcast_text()
+        return JSONResponse({"text": text})
+    except Exception as e:
+        logger.error(f"Broadcast draft generation error: {e}", exc_info=True)
+        return JSONResponse({"error": "broadcast draft generation failed"}, status_code=500)
 
 
 @app.get("/admin/stats/daily")
