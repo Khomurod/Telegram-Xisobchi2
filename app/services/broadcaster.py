@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import re
 from html import escape
+from itertools import product
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -46,22 +49,41 @@ _BROADCAST_REWRITE_PROMPT = (
     "Natija 2 yoki 3 gap bo'lsin.\n\n"
     "Matn:\n{draft}"
 )
-_FALLBACK_BROADCASTS = (
-    "Kirim va chiqimlaringizni yozib borsangiz, pulingiz qayerga ketayotganini aniq ko'rasiz. "
-    "Shu odat ortiqcha xarajatlarni kamaytirib, jamg'arishni osonlashtiradi. "
+_FALLBACK_OPENINGS = (
+    "Kirim va chiqimlaringizni yozib borsangiz, pulingiz qayerga ketayotganini aniq ko'rasiz.",
+    "Har bir xarajatni qayd qilish sizga byudjet ustidan aniq nazorat beradi.",
+    "Pulni boshqarish avvalo uni kuzatishdan boshlanadi.",
+    "Byudjetni tartibga solish uchun avvalo kirim va chiqimlarni ko'rib turish kerak.",
+    "Pul hisobini yuritish sizga tinchroq va aniqroq moliyaviy qarorlar qilishga yordam beradi.",
+    "Daromad va xarajatlarni yozib borish moliyaviy intizomning eng oddiy, lekin eng kuchli odatlaridan biridir.",
+    "Kundalik pul hisobini yuritish moliyaviy tartibni kuchaytiradi.",
+    "Xarajatlarni yozib borish sizga pul ustidan ko'proq xotirjam nazorat beradi.",
+    "Moliyaviy maqsadlarga yaqinlashish har bir sarfni ko'rishdan boshlanadi.",
+    "Pul harakatini kuzatish byudjetni boshqarishni ancha soddalashtiradi.",
+)
+_FALLBACK_BODIES = (
+    "Shu odat ortiqcha xarajatlarni kamaytirib, jamg'arishni osonlashtiradi.",
+    "Qayerda tejash va qayerga ko'proq e'tibor berish kerakligini tezroq tushunasiz.",
+    "Shunda mayda, lekin takrorlanadigan chiqimlar ham ko'zdan qochmaydi.",
+    "Nazorat kuchaygani sari jamg'arma qilish ham barqarorroq bo'ladi.",
+    "Rejasiz sarf-xarajatlar kamayganda moliyaviy maqsadlarga yetish osonlashadi.",
+    "Pul oqimini ko'rib turgan odam qarorlarni ancha ishonch bilan qabul qiladi.",
+    "Har bir yozuv sizga qaysi odatlar foydali, qaysilari esa zararli ekanini ko'rsatadi.",
+    "Shunda oy oxirida pulning qayerga singib ketgani haqida savol qolmaydi.",
+    "Kuzatuv kuchaysa, tejash va jamg'arma qilish qarori ham osonroq bo'ladi.",
+    "Aniq raqamlar bilan yashash moliyaviy rejani mustahkamlaydi.",
+)
+_FALLBACK_CLOSINGS = (
     "Moliyaviy erkinlik katta daromaddan emas, pul oqimini nazorat qilishdan boshlanadi.",
-    "Har bir xarajatni qayd qilish sizga byudjet ustidan nazorat beradi. "
-    "Qayerda tejash va qayerga ko'proq e'tibor berish kerakligini tezroq tushunasiz. "
     "Kichik intizom bugun, katta erkinlik ertaga.",
-    "Pulni boshqarish avvalo uni kuzatishdan boshlanadi. "
-    "Daromad va xarajatlar yozib borilganda maqsadli jamg'arma qilish ancha osonlashadi. "
     "Moliyaviy erkinlik ana shunday oddiy odatlardan quriladi.",
-    "Byudjetni tartibga solish uchun avvalo kirim va chiqimlarni ko'rib turish kerak. "
-    "Shunda ortiqcha xarajatlar kamayadi, jamg'arma esa izchil o'sadi. "
-    "Moliyaviy erkinlik nazoratli odatlardan boshlanadi.",
-    "Pul hisobini yuritish sizga tinchroq va aniqroq moliyaviy qarorlar qilishga yordam beradi. "
-    "Qayerda tejash, qayerda ko'proq e'tibor kerakligini tez anglaysiz. "
-    "Kirim va chiqim nazorati kelajakdagi erkinlik uchun eng yaxshi tayyorgarlikdir.",
+    "Moliyaviy barqarorlik har kuni qilinadigan kichik nazoratlardan boshlanadi.",
+    "Bugungi tartib ertangi xotirjamlikni yaratadi.",
+    "Pulga e'tibor kuchaysa, kelajak rejalari ham aniqroq bo'ladi.",
+    "Nazorat bor joyda baraka va ishonch ko'proq bo'ladi.",
+    "Bugun yozilgan har bir summa ertangi erkinlikka xizmat qiladi.",
+    "Moliyani boshqarish odati vaqt o'tgani sayin eng katta kuchingizga aylanadi.",
+    "O'z pul oqimini bilgan odam kelajagini ancha xotirjam quradi.",
 )
 _BROADCAST_CTA = (
     '\n\n&#128073; <a href="https://t.me/xisobchiman1_bot">XisobchiMan Bot</a> '
@@ -106,6 +128,9 @@ _FINANCIAL_KEYWORDS = (
     "moliyaviy",
     "erkinlik",
 )
+_BROADCAST_HISTORY_PATH = Path("data") / "broadcast_history.json"
+_broadcast_history_lock = asyncio.Lock()
+_used_broadcast_keys: set[str] | None = None
 
 _scheduler: AsyncIOScheduler | None = None
 _scheduler_lock = asyncio.Lock()
@@ -113,6 +138,10 @@ _scheduler_lock = asyncio.Lock()
 
 def _normalize_broadcast_text(text: str) -> str:
     return " ".join(text.strip().split())
+
+
+def _broadcast_history_key(text: str) -> str:
+    return _normalize_broadcast_text(text).casefold()
 
 
 def _looks_low_quality_broadcast(text: str) -> bool:
@@ -174,6 +203,102 @@ async def _rewrite_low_quality_broadcast(draft: str) -> str:
     return _normalize_broadcast_text(rewritten_text)
 
 
+def _read_broadcast_history_file(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Broadcast history file could not be read; starting with empty history.")
+        return set()
+
+    if not isinstance(payload, dict):
+        return set()
+
+    raw_messages = payload.get("messages", [])
+    if not isinstance(raw_messages, list):
+        return set()
+
+    return {
+        str(item)
+        for item in raw_messages
+        if isinstance(item, str) and item.strip()
+    }
+
+
+def _write_broadcast_history_file(path: Path, keys: set[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(
+        json.dumps({"messages": sorted(keys)}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temp_path.replace(path)
+
+
+async def _load_broadcast_history() -> set[str]:
+    global _used_broadcast_keys
+
+    if _used_broadcast_keys is not None:
+        return _used_broadcast_keys
+
+    loaded = await asyncio.to_thread(_read_broadcast_history_file, _BROADCAST_HISTORY_PATH)
+    _used_broadcast_keys = loaded
+    return _used_broadcast_keys
+
+
+async def _reserve_unique_broadcast_text(text: str) -> bool:
+    key = _broadcast_history_key(text)
+
+    async with _broadcast_history_lock:
+        history = await _load_broadcast_history()
+        if key in history:
+            return False
+
+        history.add(key)
+        await asyncio.to_thread(_write_broadcast_history_file, _BROADCAST_HISTORY_PATH, history)
+        return True
+
+
+async def _compose_unique_fallback_broadcast_text() -> str | None:
+    async with _broadcast_history_lock:
+        history = await _load_broadcast_history()
+        all_candidates = [
+            f"{opening} {body} {closing}"
+            for opening, body, closing in product(
+                _FALLBACK_OPENINGS,
+                _FALLBACK_BODIES,
+                _FALLBACK_CLOSINGS,
+            )
+        ]
+        unseen_candidates = [
+            candidate
+            for candidate in all_candidates
+            if _broadcast_history_key(candidate) not in history
+        ]
+
+        if not unseen_candidates:
+            return None
+
+        chosen = random.choice(unseen_candidates)
+        history.add(_broadcast_history_key(chosen))
+        await asyncio.to_thread(_write_broadcast_history_file, _BROADCAST_HISTORY_PATH, history)
+        return chosen
+
+
+async def _finalize_unique_broadcast(raw_text: str) -> str | None:
+    normalized = _normalize_broadcast_text(raw_text)
+    if not normalized:
+        return None
+
+    if not await _reserve_unique_broadcast_text(normalized):
+        logger.info("Broadcast candidate skipped because it was already used before.")
+        return None
+
+    return f"{escape(normalized)}{_BROADCAST_CTA}"
+
+
 async def generate_motivational_broadcast_text() -> str:
     prompt_variants = list(_BROADCAST_PROMPT_VARIANTS)
     random.shuffle(prompt_variants)
@@ -186,7 +311,9 @@ async def generate_motivational_broadcast_text() -> str:
             continue
 
         if not _looks_low_quality_broadcast(generated_text):
-            return f"{escape(generated_text)}{_BROADCAST_CTA}"
+            final_text = await _finalize_unique_broadcast(generated_text)
+            if final_text is not None:
+                return final_text
 
         logger.warning("Generated broadcast draft looked low quality; attempting rewrite: %s", generated_text)
         try:
@@ -196,10 +323,15 @@ async def generate_motivational_broadcast_text() -> str:
             continue
 
         if not _looks_low_quality_broadcast(rewritten_text):
-            return f"{escape(rewritten_text)}{_BROADCAST_CTA}"
+            final_text = await _finalize_unique_broadcast(rewritten_text)
+            if final_text is not None:
+                return final_text
 
-    fallback_text = random.choice(_FALLBACK_BROADCASTS)
-    logger.warning("Falling back to curated broadcast copy after repeated low-quality AI drafts.")
+    fallback_text = await _compose_unique_fallback_broadcast_text()
+    if fallback_text is None:
+        raise RuntimeError("All curated fallback broadcast messages have been exhausted.")
+
+    logger.warning("Falling back to curated composed broadcast copy after repeated low-quality AI drafts.")
     return f"{escape(fallback_text)}{_BROADCAST_CTA}"
 
 
