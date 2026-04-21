@@ -5,7 +5,6 @@ import json
 import random
 import re
 from html import escape
-from itertools import product
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -129,8 +128,10 @@ _FINANCIAL_KEYWORDS = (
     "erkinlik",
 )
 _BROADCAST_HISTORY_PATH = Path("data") / "broadcast_history.json"
+_FALLBACK_STATE_PATH = Path("data") / "broadcast_fallback_state.json"
 _broadcast_history_lock = asyncio.Lock()
 _used_broadcast_keys: set[str] | None = None
+_fallback_state: dict[str, object] | None = None
 
 _scheduler: AsyncIOScheduler | None = None
 _scheduler_lock = asyncio.Lock()
@@ -142,6 +143,26 @@ def _normalize_broadcast_text(text: str) -> str:
 
 def _broadcast_history_key(text: str) -> str:
     return _normalize_broadcast_text(text).casefold()
+
+
+def _build_default_fallback_state() -> dict[str, object]:
+    opening_order = list(_FALLBACK_OPENINGS)
+    body_order = list(_FALLBACK_BODIES)
+    closing_order = list(_FALLBACK_CLOSINGS)
+    random.shuffle(opening_order)
+    random.shuffle(body_order)
+    random.shuffle(closing_order)
+    return {
+        "opening_order": opening_order,
+        "opening_index": 0,
+        "opening_last": "",
+        "body_order": body_order,
+        "body_index": 0,
+        "body_last": "",
+        "closing_order": closing_order,
+        "closing_index": 0,
+        "closing_last": "",
+    }
 
 
 def _looks_low_quality_broadcast(text: str) -> bool:
@@ -237,6 +258,46 @@ def _write_broadcast_history_file(path: Path, keys: set[str]) -> None:
     temp_path.replace(path)
 
 
+def _read_fallback_state_file(path: Path) -> dict[str, object]:
+    default_state = _build_default_fallback_state()
+    if not path.exists():
+        return default_state
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Fallback state file could not be read; regenerating fallback order.")
+        return default_state
+
+    if not isinstance(payload, dict):
+        return default_state
+
+    state = default_state.copy()
+    for key in default_state:
+        value = payload.get(key)
+        if isinstance(default_state[key], list):
+            if isinstance(value, list) and value:
+                state[key] = [str(item) for item in value if isinstance(item, str)]
+        elif isinstance(default_state[key], int):
+            if isinstance(value, int):
+                state[key] = value
+        elif isinstance(default_state[key], str):
+            if isinstance(value, str):
+                state[key] = value
+
+    return state
+
+
+def _write_fallback_state_file(path: Path, state: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temp_path.replace(path)
+
+
 async def _load_broadcast_history() -> set[str]:
     global _used_broadcast_keys
 
@@ -246,6 +307,17 @@ async def _load_broadcast_history() -> set[str]:
     loaded = await asyncio.to_thread(_read_broadcast_history_file, _BROADCAST_HISTORY_PATH)
     _used_broadcast_keys = loaded
     return _used_broadcast_keys
+
+
+async def _load_fallback_state() -> dict[str, object]:
+    global _fallback_state
+
+    if _fallback_state is not None:
+        return _fallback_state
+
+    loaded = await asyncio.to_thread(_read_fallback_state_file, _FALLBACK_STATE_PATH)
+    _fallback_state = loaded
+    return _fallback_state
 
 
 async def _reserve_unique_broadcast_text(text: str) -> bool:
@@ -261,30 +333,74 @@ async def _reserve_unique_broadcast_text(text: str) -> bool:
         return True
 
 
+def _next_fallback_component(
+    state: dict[str, object],
+    *,
+    prefix: str,
+    options: tuple[str, ...],
+) -> str:
+    order_key = f"{prefix}_order"
+    index_key = f"{prefix}_index"
+    last_key = f"{prefix}_last"
+
+    order = state.get(order_key)
+    index = state.get(index_key)
+    last_value = str(state.get(last_key) or "")
+
+    normalized_options = list(options)
+    if not isinstance(order, list) or sorted(order) != sorted(normalized_options):
+        order = normalized_options[:]
+        random.shuffle(order)
+        if len(order) > 1 and order[0] == last_value:
+            order.append(order.pop(0))
+        index = 0
+
+    if not isinstance(index, int) or index >= len(order):
+        order = normalized_options[:]
+        random.shuffle(order)
+        if len(order) > 1 and order[0] == last_value:
+            order.append(order.pop(0))
+        index = 0
+
+    choice = order[index]
+    state[order_key] = order
+    state[index_key] = index + 1
+    state[last_key] = choice
+    return choice
+
+
 async def _compose_unique_fallback_broadcast_text() -> str | None:
     async with _broadcast_history_lock:
         history = await _load_broadcast_history()
-        all_candidates = [
-            f"{opening} {body} {closing}"
-            for opening, body, closing in product(
-                _FALLBACK_OPENINGS,
-                _FALLBACK_BODIES,
-                _FALLBACK_CLOSINGS,
+        fallback_state = await _load_fallback_state()
+
+        for _ in range(len(_FALLBACK_OPENINGS) * len(_FALLBACK_BODIES) * len(_FALLBACK_CLOSINGS)):
+            opening = _next_fallback_component(
+                fallback_state,
+                prefix="opening",
+                options=_FALLBACK_OPENINGS,
             )
-        ]
-        unseen_candidates = [
-            candidate
-            for candidate in all_candidates
-            if _broadcast_history_key(candidate) not in history
-        ]
+            body = _next_fallback_component(
+                fallback_state,
+                prefix="body",
+                options=_FALLBACK_BODIES,
+            )
+            closing = _next_fallback_component(
+                fallback_state,
+                prefix="closing",
+                options=_FALLBACK_CLOSINGS,
+            )
+            chosen = f"{opening} {body} {closing}"
+            key = _broadcast_history_key(chosen)
+            if key in history:
+                continue
 
-        if not unseen_candidates:
-            return None
+            history.add(key)
+            await asyncio.to_thread(_write_broadcast_history_file, _BROADCAST_HISTORY_PATH, history)
+            await asyncio.to_thread(_write_fallback_state_file, _FALLBACK_STATE_PATH, fallback_state)
+            return chosen
 
-        chosen = random.choice(unseen_candidates)
-        history.add(_broadcast_history_key(chosen))
-        await asyncio.to_thread(_write_broadcast_history_file, _BROADCAST_HISTORY_PATH, history)
-        return chosen
+        return None
 
 
 async def _finalize_unique_broadcast(raw_text: str) -> str | None:
