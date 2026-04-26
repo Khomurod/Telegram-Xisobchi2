@@ -8,6 +8,8 @@ let adminToken = sessionStorage.getItem('admin_token') || '';
 let currentPage = 1;
 let broadcastPreviewSnapshot = '';
 let broadcastApproved = false;
+let usersSearchTerm = '';
+let usersSearchDebounce = null;
 const SCHEDULE_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 
@@ -23,14 +25,69 @@ function pad2(value) {
 
 function setResultBox(elementId, message, tone = 'info') {
     const result = document.getElementById(elementId);
-    const tones = {
-        info: 'display:block;background:rgba(88,166,255,.1);color:var(--accent)',
-        success: 'display:block;background:rgba(63,185,80,.15);color:var(--income)',
-        warning: 'display:block;background:rgba(210,153,34,.18);color:var(--gold)',
-        error: 'display:block;background:rgba(248,81,73,.15);color:var(--expense)',
-    };
-    result.style.cssText = tones[tone] || tones.info;
-    result.textContent = message;
+    if (result) {
+        result.style.display = 'none';
+        result.textContent = '';
+    }
+    showToast(message, tone);
+}
+function showToast(message, tone = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${tone}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+
+
+function escHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+
+function formatBalanceBadge(user) {
+    const uzs = Number(user.total_balance_uzs || 0);
+    const usd = Number(user.total_balance_usd || 0);
+    const parts = [];
+
+    parts.push(`${uzs >= 0 ? '+' : '-'}${fmtM(Math.abs(uzs))} UZS`);
+    if (usd !== 0) {
+        parts.push(`${usd >= 0 ? '+' : '-'}$${fmtM(Math.abs(usd))}`);
+    }
+    return parts.join(' | ');
+}
+
+
+function bindUsersSearch() {
+    const input = document.getElementById('users-search');
+    if (!input || input.dataset.bound === '1') return;
+
+    input.dataset.bound = '1';
+    input.addEventListener('input', () => {
+        usersSearchTerm = input.value.trim();
+        clearTimeout(usersSearchDebounce);
+        usersSearchDebounce = setTimeout(() => loadUsers(1), 220);
+    });
+}
+
+
+function clearAdminResultBoxes() {
+    ['bc-result', 'sp-result'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = 'none';
+            el.textContent = '';
+        }
+    });
 }
 
 
@@ -94,8 +151,7 @@ function updateBroadcastApproval() {
 
 function resetBroadcastComposer() {
     document.getElementById('bc-text').value = '';
-    document.getElementById('bc-result').style.display = 'none';
-    document.getElementById('bc-result').textContent = '';
+    clearAdminResultBoxes();
     broadcastPreviewSnapshot = '';
     broadcastApproved = false;
     setBroadcastPreview('', true);
@@ -114,8 +170,7 @@ function resetScheduledPoolPanel() {
     document.getElementById('sp-next').textContent = 'Keyingi: -';
     document.getElementById('sp-remaining').textContent = 'Qolgan: 0';
     document.getElementById('sp-next-run').textContent = 'Yuborish: -';
-    document.getElementById('sp-result').style.display = 'none';
-    document.getElementById('sp-result').textContent = '';
+    clearAdminResultBoxes();
     setScheduledPreview('');
     toggleScheduledControls();
 }
@@ -238,10 +293,15 @@ async function adminLogin() {
         sessionStorage.setItem('admin_token', adminToken);
         document.getElementById('admin-gate').style.display = 'none';
         document.getElementById('admin-dash').style.display = 'block';
+        bindUsersSearch();
+        usersSearchTerm = '';
+        const searchInput = document.getElementById('users-search');
+        if (searchInput) searchInput.value = '';
         resetBroadcastComposer();
         resetScheduledPoolPanel();
         await loadUsers(1);
         await loadScheduledPool(false);
+        showToast('Admin panelga muvaffaqiyatli kirildi.', 'success');
     } catch (e) {
         err.textContent = 'Server xatoligi: ' + e.message;
         err.style.display = 'block';
@@ -251,6 +311,9 @@ async function adminLogin() {
 
 function adminLogout() {
     adminToken = '';
+    usersSearchTerm = '';
+    const searchInput = document.getElementById('users-search');
+    if (searchInput) searchInput.value = '';
     sessionStorage.removeItem('admin_token');
     document.getElementById('admin-gate').style.display = 'block';
     document.getElementById('admin-dash').style.display = 'none';
@@ -263,10 +326,18 @@ async function loadUsers(page = 1) {
     currentPage = page;
     const body = document.getElementById('users-body');
     const pages = document.getElementById('users-pages');
-    body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Yuklanmoqda...</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted)">Yuklanmoqda...</td></tr>';
 
     try {
-        const res = await fetch(`${API}/admin/users?page=${page}&limit=15`, {
+        const params = new URLSearchParams({
+            page: String(page),
+            limit: '15',
+        });
+        if (usersSearchTerm) {
+            params.set('search', usersSearchTerm);
+        }
+
+        const res = await fetch(`${API}/admin/users?${params.toString()}`, {
             headers: { 'X-Admin-Token': adminToken },
         });
         if (!res.ok) throw new Error('Server: ' + res.status);
@@ -278,14 +349,16 @@ async function loadUsers(page = 1) {
         body.innerHTML = d.users.map((u, i) => `
       <tr id="row-${u.telegram_id}" class="clickable-row" onclick="openUser(${u.telegram_id})">
         <td style="color:var(--muted)">${(page - 1) * d.limit + i + 1}</td>
-        <td>${u.first_name || '-'}</td>
-        <td style="color:var(--muted);font-size:.85rem">${u.telegram_first_name || '-'}</td>
-        <td>${u.username ? '@' + u.username : '-'}</td>
+        <td>${escHtml(u.first_name || '-')}</td>
+        <td style="color:var(--muted);font-size:.85rem">${escHtml(u.telegram_first_name || '-')}</td>
+        <td>${u.username ? '@' + escHtml(u.username) : '-'}</td>
         <td style="font-family:monospace;font-size:.78rem">${u.telegram_id}</td>
-        <td style="color:var(--muted)">${u.created_at ? new Date(u.created_at).toLocaleDateString('uz') : '-'}</td>
+        <td>${u.total_transactions || 0}</td>
+        <td style="font-weight:600">${formatBalanceBadge(u)}</td>
+        <td style="color:var(--muted)">${u.last_active_at ? new Date(u.last_active_at).toLocaleString('uz') : '-'}</td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap">
           <button class="btn btn-danger btn-small"
-            onclick="deleteUser(${u.telegram_id}, '${(u.first_name || u.telegram_id).replace(/'/g, '')}')"
+            onclick="deleteUser(${u.telegram_id}, '${escHtml((u.first_name || String(u.telegram_id))).replace(/'/g, '')}')"
             title="O'chirish">O'chir</button>
         </td>
       </tr>`).join('');
@@ -298,7 +371,8 @@ async function loadUsers(page = 1) {
         if (page < totalPages) phtml += `<button class="btn btn-primary btn-small" onclick="loadUsers(${page + 1})">Keyingi</button>`;
         pages.innerHTML = phtml;
     } catch (e) {
-        body.innerHTML = `<tr><td colspan="7" style="color:var(--expense)">Xatolik: ${e.message}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="9" style="color:var(--expense)">Xatolik: ${escHtml(e.message)}</td></tr>`;
+        showToast('Foydalanuvchilar ro\'yxatini yuklashda xatolik yuz berdi.', 'error');
     }
 }
 
@@ -387,7 +461,7 @@ async function deleteUser(telegramId, displayName) {
         });
         const d = await res.json();
         if (!res.ok) {
-            alert('Xatolik: ' + (d.error || res.status));
+            showToast('Xatolik: ' + (d.error || res.status), 'error');
             return;
         }
 
@@ -396,8 +470,9 @@ async function deleteUser(telegramId, displayName) {
         const match = countEl.textContent.match(/(\d+)/);
         if (match) countEl.textContent = `Jami ${Math.max(parseInt(match[1], 10) - 1, 0)} ta foydalanuvchi`;
         closeUserPanel();
+        showToast('Foydalanuvchi o\'chirildi.', 'success');
     } catch (e) {
-        alert('Xatolik: ' + e.message);
+        showToast('Xatolik: ' + e.message, 'error');
     }
 }
 

@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from aiogram.types import Update
-from sqlalchemy import select, func
+from sqlalchemy import String, and_, case, cast, func, or_, select
 from app.bot import bot, dp
 from app.config import settings
 from app.database.connection import init_db, async_session
@@ -168,23 +168,80 @@ def _check_admin(request: Request) -> bool:
 
 
 @app.get("/admin/users")
-async def admin_users(request: Request, page: int = 1, limit: int = 20):
+async def admin_users(request: Request, page: int = 1, limit: int = 20, search: str = ""):
     """Paginated list of registered users. Protected by X-Admin-Token."""
     if not _check_admin(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     try:
+        page = max(1, page)
+        limit = min(max(1, limit), 100)
         offset = (page - 1) * limit
+        search = (search or "").strip()
+        search_like = f"%{search.lower()}%"
+
         async with async_session() as session:
+            users_query = select(User)
+            if search:
+                users_query = users_query.where(
+                    or_(
+                        cast(User.telegram_id, String).ilike(f"%{search}%"),
+                        func.lower(func.coalesce(User.username, "")).ilike(search_like),
+                        func.lower(func.coalesce(User.first_name, "")).ilike(search_like),
+                        func.lower(func.coalesce(User.telegram_first_name, "")).ilike(search_like),
+                    )
+                )
+
             total = (await session.execute(
-                select(func.count()).select_from(User)
+                select(func.count()).select_from(users_query.subquery())
             )).scalar() or 0
 
             rows = (await session.execute(
-                select(User)
+                users_query
                 .order_by(User.created_at.desc())
                 .offset(offset)
                 .limit(limit)
             )).scalars().all()
+
+            user_ids = [u.id for u in rows]
+            stats_by_user = {}
+            if user_ids:
+                stats_rows = (await session.execute(
+                    select(
+                        Transaction.user_id.label("user_id"),
+                        func.count(Transaction.id).label("total_transactions"),
+                        func.coalesce(
+                            func.sum(
+                                case(
+                                    (and_(Transaction.type == "income", Transaction.currency == "UZS"), Transaction.amount),
+                                    (and_(Transaction.type == "expense", Transaction.currency == "UZS"), -Transaction.amount),
+                                    else_=0,
+                                )
+                            ),
+                            0,
+                        ).label("total_balance_uzs"),
+                        func.coalesce(
+                            func.sum(
+                                case(
+                                    (and_(Transaction.type == "income", Transaction.currency == "USD"), Transaction.amount),
+                                    (and_(Transaction.type == "expense", Transaction.currency == "USD"), -Transaction.amount),
+                                    else_=0,
+                                )
+                            ),
+                            0,
+                        ).label("total_balance_usd"),
+                        func.max(Transaction.created_at).label("last_active_at"),
+                    )
+                    .where(Transaction.user_id.in_(user_ids))
+                    .group_by(Transaction.user_id)
+                )).all()
+
+                for row in stats_rows:
+                    stats_by_user[row.user_id] = {
+                        "total_transactions": int(row.total_transactions or 0),
+                        "total_balance_uzs": float(row.total_balance_uzs or 0),
+                        "total_balance_usd": float(row.total_balance_usd or 0),
+                        "last_active_at": row.last_active_at,
+                    }
 
         users = [
             {
@@ -194,10 +251,24 @@ async def admin_users(request: Request, page: int = 1, limit: int = 20):
                 "telegram_first_name": u.telegram_first_name or "",
                 "username": u.username or "",
                 "created_at": u.created_at.isoformat() if u.created_at else "",
+                "total_transactions": stats_by_user.get(u.id, {}).get("total_transactions", 0),
+                "total_balance_uzs": stats_by_user.get(u.id, {}).get("total_balance_uzs", 0.0),
+                "total_balance_usd": stats_by_user.get(u.id, {}).get("total_balance_usd", 0.0),
+                "last_active_at": (
+                    (stats_by_user.get(u.id, {}).get("last_active_at") or u.created_at).isoformat()
+                    if (stats_by_user.get(u.id, {}).get("last_active_at") or u.created_at)
+                    else ""
+                ),
             }
             for u in rows
         ]
-        return JSONResponse({"total": total, "page": page, "limit": limit, "users": users})
+        return JSONResponse({
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "search": search,
+            "users": users,
+        })
     except Exception as e:
         logger.error(f"Admin users error: {e}", exc_info=True)
         return JSONResponse({"error": "unavailable"}, status_code=500)

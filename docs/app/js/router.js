@@ -79,6 +79,11 @@ function updateNavActive(hash) {
             btn.classList.remove('active');
         }
     });
+
+    const fab = document.getElementById('fab-add');
+    if (fab) {
+        fab.classList.toggle('active', hash === '#/add');
+    }
 }
 
 // ── Event listeners ─────────────────────────────────────────
@@ -89,6 +94,13 @@ window.addEventListener('hashchange', navigate);
 document.getElementById('bottom-nav')?.addEventListener('click', e => {
     const btn = e.target.closest('.nav-btn[data-route]');
     if (!btn) return;
+    hapticLight();
+    location.hash = btn.dataset.route;
+});
+
+document.getElementById('fab-add')?.addEventListener('click', e => {
+    const btn = e.currentTarget;
+    if (!btn?.dataset?.route) return;
     hapticLight();
     location.hash = btn.dataset.route;
 });

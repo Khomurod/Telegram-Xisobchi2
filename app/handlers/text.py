@@ -5,12 +5,14 @@ Example: "ovqatga 50 ming, transportga 20 ming" or "maosh oldim 5 million"
 """
 import time
 from aiogram import Router, types, F
+from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ButtonStyle
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
 from app.services.parser import parse_transactions
+from app.services.phone_prompt import send_phone_prompt
 from app.services.transaction import TransactionService
 from app.constants import CATEGORY_EMOJI, CATEGORY_NAMES
 from app.utils.formatting import format_amount
@@ -25,6 +27,20 @@ _text_pending: dict[str, dict] = {}
 _PENDING_TTL = 300.0  # 5 minutes — entries older than this are discarded
 
 
+async def _maybe_send_phone_prompt(
+    callback: CallbackQuery,
+    telegram_id: int,
+    should_request_phone: bool,
+) -> None:
+    if not should_request_phone:
+        return
+
+    try:
+        await send_phone_prompt(callback.bot, telegram_id)
+    except Exception as e:
+        logger.error(f"Failed to send delayed phone prompt to user {telegram_id}: {e}", exc_info=True)
+
+
 def _cleanup_stale_pending() -> None:
     """Remove stale text pending confirmations to prevent memory leaks."""
     now = time.time()
@@ -35,8 +51,11 @@ def _cleanup_stale_pending() -> None:
 
 
 @router.message(F.text & ~F.text.startswith("/"))
-async def handle_text(message: types.Message):
+async def handle_text(message: types.Message, state: FSMContext):
     """Parse typed text as financial transaction(s). Supports multiple in one message."""
+    if await state.get_state():
+        return
+
     text = message.text.strip()
     user_id = message.from_user.id
 
@@ -157,6 +176,11 @@ async def handle_text_confirm(callback: CallbackQuery):
                         f"{cat_emoji} *Kategoriya:* {txn['category']}\n"
                     )
                     await callback.message.edit_text(response, parse_mode="Markdown")
+                    await _maybe_send_phone_prompt(
+                        callback=callback,
+                        telegram_id=pending["telegram_id"],
+                        should_request_phone=result.get("should_request_phone", False),
+                    )
                 else:
                     await callback.message.edit_text(
                         "⚠️ Saqlashda xatolik yuz berdi. Qaytadan urinib ko'ring."
@@ -176,6 +200,11 @@ async def handle_text_confirm(callback: CallbackQuery):
                         amount_str = format_amount(txn["amount"], txn["currency"])
                         lines.append(f"{i}. {emoji} {amount_str} — {cat_emoji} {txn['category']}")
                     await callback.message.edit_text("\n".join(lines), parse_mode="Markdown")
+                    await _maybe_send_phone_prompt(
+                        callback=callback,
+                        telegram_id=pending["telegram_id"],
+                        should_request_phone=result.get("should_request_phone", False),
+                    )
                 else:
                     await callback.message.edit_text(
                         "⚠️ Saqlashda xatolik yuz berdi. Qaytadan urinib ko'ring."

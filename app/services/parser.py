@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,13 +43,25 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.strip().split())
 
 
+def _sanitize_numeric_string(value: str) -> str:
+    """Strip common visual separators so numeric parsing is stable."""
+    cleaned = value.strip()
+    cleaned = re.sub(r"[\s,]", "", cleaned)
+
+    # Handle formats like "1.200.000" (thousand separators as dots).
+    if cleaned.count(".") > 1:
+        cleaned = cleaned.replace(".", "")
+
+    return cleaned
+
+
 def _coerce_amount(value: Any) -> float:
     if isinstance(value, bool):
         raise ValueError("Boolean amount is invalid.")
     if isinstance(value, (int, float)):
         amount = float(value)
     elif isinstance(value, str):
-        amount = float(value.replace(",", "").strip())
+        amount = float(_sanitize_numeric_string(value))
     else:
         raise ValueError(f"Unsupported amount type: {type(value)!r}")
 
@@ -56,6 +69,40 @@ def _coerce_amount(value: Any) -> float:
         raise ValueError("Amount must be positive.")
 
     return amount
+
+
+def _extract_amount(text: str) -> float | None:
+    """
+    Lightweight extractor kept for edit flow compatibility.
+
+    Examples:
+    - "50000" -> 50000
+    - "559 000" -> 559000
+    - "5,200,000" -> 5200000
+    - "50 ming" -> 50000
+    - "3 mln" -> 3000000
+    """
+    normalized = _normalize_text(text).lower()
+    match = re.search(r"(\d[\d\s,\.]*)\s*(mlrd|milliard|mln|million|ming|k)?", normalized)
+    if not match:
+        return None
+
+    raw_num, suffix = match.groups()
+    try:
+        base = float(_sanitize_numeric_string(raw_num))
+    except ValueError:
+        return None
+
+    multipliers = {
+        "k": 1_000,
+        "ming": 1_000,
+        "mln": 1_000_000,
+        "million": 1_000_000,
+        "mlrd": 1_000_000_000,
+        "milliard": 1_000_000_000,
+    }
+    amount = base * multipliers.get(suffix or "", 1)
+    return amount if amount > 0 else None
 
 
 def _to_parsed_transaction(item: Any, raw_text: str) -> ParsedTransaction | None:

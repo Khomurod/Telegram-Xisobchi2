@@ -135,3 +135,10 @@ class TransactionRepository(BaseRepository):
             .where(Transaction.user_id == user_id, Transaction.created_at >= month_start)
         )
         return result.scalar() or 0
+
+    async def count_all(self, user_id: int) -> int:
+        """Count all transactions for a user."""
+        result = await self.session.execute(
+            select(func.count()).select_from(Transaction).where(Transaction.user_id == user_id)
+        )
+        return result.scalar() or 0

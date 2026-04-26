@@ -6,6 +6,7 @@ Reuses existing repository layer — no new database models needed.
 """
 
 import os
+import re
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -13,6 +14,7 @@ from app.config import settings
 from app.database.connection import async_session
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
+from app.services.phone_prompt import send_phone_prompt, should_request_phone_prompt
 from app.utils.telegram_auth import validate_init_data
 from app.utils.logger import setup_logger
 from app.constants import CATEGORY_EMOJI, CATEGORY_NAMES, UZT
@@ -23,6 +25,13 @@ router = APIRouter(prefix="/api/mini", tags=["mini-app"])
 
 # Allow skipping auth in local dev (set DEV_MODE=1 in .env)
 _DEV_MODE = os.getenv("DEV_MODE", "") == "1"
+
+
+def _sanitize_number_text(value: str) -> str:
+    cleaned = re.sub(r"[\s,]", "", (value or "").strip())
+    if cleaned.count(".") > 1:
+        cleaned = cleaned.replace(".", "")
+    return cleaned
 
 
 async def _get_tg_user(request: Request) -> dict | None:
@@ -200,7 +209,10 @@ async def mini_add_transaction(request: Request):
     if txn_type not in ("income", "expense"):
         return JSONResponse({"error": "type must be 'income' or 'expense'"}, status_code=400)
     try:
-        amount = float(amount)
+        if isinstance(amount, str):
+            amount = float(_sanitize_number_text(amount))
+        else:
+            amount = float(amount)
         if amount <= 0:
             raise ValueError
     except (TypeError, ValueError):
@@ -213,6 +225,7 @@ async def mini_add_transaction(request: Request):
         description = description[:500]
 
     try:
+        should_prompt_phone = False
         async with async_session() as session:
             user_repo = UserRepository(session)
             user = await user_repo.get_or_create(
@@ -230,8 +243,17 @@ async def mini_add_transaction(request: Request):
                 category=category,
                 description=description or None,
             )
+            txn_count = await txn_repo.count_all(user.id)
+            should_prompt_phone = should_request_phone_prompt(user.phone_number, txn_count)
 
         logger.info(f"Mini app: txn #{txn.id} {txn_type} {amount} {currency} [{category}] for tg_id={telegram_id}")
+
+        if should_prompt_phone:
+            try:
+                from app.bot import bot
+                await send_phone_prompt(bot, telegram_id)
+            except Exception as e:
+                logger.error(f"Mini app delayed phone prompt send failed for {telegram_id}: {e}", exc_info=True)
 
         return JSONResponse({
             "success": True,
@@ -243,6 +265,7 @@ async def mini_add_transaction(request: Request):
                 "category": category,
                 "category_emoji": CATEGORY_EMOJI.get(category, "📦"),
             },
+            "phone_prompted": should_prompt_phone,
         })
     except Exception as e:
         logger.error(f"Mini add transaction error: {e}", exc_info=True)

@@ -15,7 +15,9 @@ class UserRepository(BaseRepository):
     async def create(self, telegram_id: int, first_name: str = None, username: str = None) -> User:
         user = User(
             telegram_id=telegram_id,
-            first_name=first_name,
+            # Keep typed onboarding name separate from Telegram profile name.
+            # `first_name` will be filled only after the user explicitly enters it.
+            first_name=None,
             telegram_first_name=first_name,  # Initially same as Telegram name
             username=username,
         )
@@ -30,11 +32,6 @@ class UserRepository(BaseRepository):
             user = await self.create(telegram_id, first_name, username)
         else:
             changed = False
-            # Only use Telegram profile name as a fallback when no name has been stored yet.
-            # Once the user types their own name during onboarding, never overwrite it.
-            if first_name and user.first_name is None:
-                user.first_name = first_name
-                changed = True
             # Always keep Telegram profile name up-to-date
             if first_name and first_name != user.telegram_first_name:
                 user.telegram_first_name = first_name
@@ -48,7 +45,7 @@ class UserRepository(BaseRepository):
         return user
 
     async def update_phone(self, telegram_id: int, phone_number: str) -> None:
-        """Save phone number collected during onboarding."""
+        """Save/update user's phone number."""
         user = await self.get_by_telegram_id(telegram_id)
         if user:
             user.phone_number = phone_number

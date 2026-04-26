@@ -1,6 +1,7 @@
 from app.database.repositories.user import UserRepository
 from app.database.repositories.transaction import TransactionRepository
 from app.services.parser import parse_transaction, ParsedTransaction
+from app.services.phone_prompt import should_request_phone_prompt
 from app.utils.logger import setup_logger
 
 logger = setup_logger("transaction_service")
@@ -68,15 +69,18 @@ class TransactionService:
         """
         user = await self.user_repo.get_or_create(telegram_id, first_name, username)
         saved = []
+        should_request_phone = False
         for parsed in parsed_list:
             result = await self._store(user, parsed, telegram_id)
             if result["success"]:
                 saved.append(result["transaction"])
+                should_request_phone = should_request_phone or result.get("should_request_phone", False)
 
         return {
             "success": len(saved) > 0,
             "transactions": saved,
             "count": len(saved),
+            "should_request_phone": should_request_phone,
         }
 
     async def _store(self, user, parsed: ParsedTransaction, telegram_id: int) -> dict:
@@ -89,6 +93,8 @@ class TransactionService:
             category=parsed.category,
             description=parsed.description,
         )
+        transaction_count = await self.txn_repo.count_all(user.id)
+        should_request_phone = should_request_phone_prompt(user.phone_number, transaction_count)
 
         logger.info(
             f"Transaction #{txn.id} saved: {parsed.type} {parsed.amount} "
@@ -104,4 +110,6 @@ class TransactionService:
                 "currency": parsed.currency,
                 "category": parsed.category,
             },
+            "transaction_count": transaction_count,
+            "should_request_phone": should_request_phone,
         }

@@ -44,6 +44,9 @@
     <div id="admin-dash" style="display:none">
       <div class="box">
         <div class="box-title">Foydalanuvchilar</div>
+        <div class="users-toolbar">
+          <input type="search" id="users-search" placeholder="ID, username yoki ism bo'yicha qidirish..." />
+        </div>
         <table class="tbl" id="users-tbl">
           <thead>
             <tr>
@@ -52,7 +55,9 @@
               <th>TG Ism</th>
               <th>Username</th>
               <th>Telegram ID</th>
-              <th>Ro'yxatdan o'tgan</th>
+              <th>Jami operatsiya</th>
+              <th>Jami balans</th>
+              <th>So'nggi faol</th>
               <th>Amal</th>
             </tr>
           </thead>
@@ -187,6 +192,8 @@
       </div>
     </div>
   </div>
+
+  <div class="toast-container" id="toast-container"></div>
 
   <footer>
     Built with care · Powered by

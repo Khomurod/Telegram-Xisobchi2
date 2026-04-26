@@ -31,6 +31,15 @@ let _addState = {
     category: 'boshqa',
 };
 
+function parseSanitizedAmount(rawValue) {
+    const cleaned = String(rawValue || '')
+        .trim()
+        .replace(/[\s,]/g, '');
+
+    if (!cleaned) return NaN;
+    return Number.parseFloat(cleaned);
+}
+
 function renderAddForm(container) {
     _addState = { type: 'expense', currency: 'UZS', category: 'boshqa' };
 
@@ -61,8 +70,8 @@ function renderAddForm(container) {
         <div class="form-label">Summa</div>
         <div class="amount-row">
           <div class="amount-input-wrap">
-            <input type="number" class="amount-input" id="add-amount"
-                   placeholder="0" inputmode="decimal" min="0" step="any" />
+            <input type="text" class="amount-input" id="add-amount"
+                   placeholder="0" inputmode="decimal" />
           </div>
           <div class="currency-toggle">
             <button class="currency-btn active" data-cur="UZS">UZS</button>
@@ -144,7 +153,7 @@ function renderAddForm(container) {
 async function handleAddSubmit(container) {
     const amountInput = document.querySelector('#add-amount');
     const descInput = document.querySelector('#add-desc');
-    const amount = parseFloat(amountInput?.value);
+    const amount = parseSanitizedAmount(amountInput?.value);
     const description = (descInput?.value || '').trim();
 
     if (!amount || amount <= 0) {
