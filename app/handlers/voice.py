@@ -193,6 +193,7 @@ def _build_confirm_text(
     conf_warning: str = "",
 ) -> str:
     """Build a confirmation message for one or more parsed transactions."""
+    interpreted_text = _build_interpreted_text(parsed_list, raw_text)
     if len(parsed_list) == 1:
         parsed = parsed_list[0]
         type_uz = "Kirim" if parsed.type == "income" else "Chiqim"
@@ -204,7 +205,7 @@ def _build_confirm_text(
             f"{emoji} *{type_uz}*\n"
             f"💵 {amount_str}\n"
             f"{cat_emoji} {cat_name}\n\n"
-            f"📝 _{raw_text}_\n"
+            f"📝 _{interpreted_text}_\n"
             f"{conf_warning}\n"
             "Shu ma'lumot to'g'rimi?"
         )
@@ -221,11 +222,32 @@ def _build_confirm_text(
             f"     {cat_emoji} {cat_name}"
         )
 
-    lines.append(f"\n📝 _{raw_text}_")
+    lines.append(f"\n📝 _{interpreted_text}_")
     if conf_warning:
         lines.append(conf_warning)
     lines.append("\nBarchasini saqlaymizmi?")
     return "\n".join(lines)
+
+
+def _build_interpreted_text(parsed_list: list, raw_text: str) -> str:
+    """Return a cleaner summary than the raw STT transcript."""
+    if not parsed_list:
+        return raw_text
+
+    if len(parsed_list) == 1:
+        return _describe_transaction(parsed_list[0])
+
+    return "; ".join(_describe_transaction(parsed) for parsed in parsed_list)
+
+
+def _describe_transaction(parsed) -> str:
+    amount_str = format_amount(parsed.amount, parsed.currency)
+    category_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
+
+    if parsed.type == "income":
+        return f"{amount_str} {category_name} bo'yicha kirim"
+
+    return f"{amount_str} {category_name} uchun chiqim"
 
 
 @router.callback_query(F.data.startswith("confirm_"))
