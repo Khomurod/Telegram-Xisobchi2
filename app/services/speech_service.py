@@ -33,6 +33,13 @@ class TranscriptionResult:
     language: str
 
 
+def _preview_text(text: str, limit: int = 150) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[: limit - 3]}..."
+
+
 async def _get_session() -> aiohttp.ClientSession:
     global _session
 
@@ -125,3 +132,151 @@ async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> T
             duration_seconds=elapsed,
             language="uz",
         )
+
+
+async def transcribe_audio_whisper_test(
+    audio_bytes: bytes,
+    filename: str = "voice.ogg",
+) -> TranscriptionResult:
+    """
+    Transcribe audio using the external Faster-Whisper test endpoint.
+
+    The file is sent as multipart/form-data under the `file` field and expects
+    a response shaped like {"text": "..."}.
+    """
+    if not settings.WHISPER_TEST_TRANSCRIBE_URL:
+        raise RuntimeError(
+            "Whisper test URL not configured. Set WHISPER_TEST_URL env var."
+        )
+
+    start_time = time.time()
+    logger.info(
+        "Shadow-testing Faster-Whisper (%s bytes) via %s",
+        f"{len(audio_bytes):,}",
+        settings.WHISPER_TEST_TRANSCRIBE_URL,
+    )
+
+    form = aiohttp.FormData()
+    form.add_field(
+        "file",
+        audio_bytes,
+        filename=filename,
+        content_type="audio/ogg",
+    )
+
+    try:
+        session = await _get_session()
+        async with session.post(
+            settings.WHISPER_TEST_TRANSCRIBE_URL,
+            data=form,
+            timeout=aiohttp.ClientTimeout(total=settings.WHISPER_TEST_TIMEOUT_SECONDS),
+        ) as resp:
+            elapsed = time.time() - start_time
+
+            if resp.status != 200:
+                error_text = await resp.text()
+                logger.error("Whisper test error %s: %s", resp.status, error_text)
+                return TranscriptionResult(
+                    text="",
+                    confidence=0.0,
+                    duration_seconds=elapsed,
+                    language="uz",
+                )
+
+            result = await resp.json(content_type=None)
+            text = str(result.get("text", "")).strip()
+            confidence = 0.95 if text else 0.0
+
+            logger.info("Whisper test STT (%.1fs): %s", elapsed, _preview_text(text))
+
+            return TranscriptionResult(
+                text=text,
+                confidence=confidence,
+                duration_seconds=elapsed,
+                language="uz",
+            )
+
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        elapsed = time.time() - start_time
+        logger.error("Whisper test request failed (%.1fs): %s", elapsed, exc)
+        return TranscriptionResult(
+            text="",
+            confidence=0.0,
+            duration_seconds=elapsed,
+            language="uz",
+        )
+
+
+def should_run_whisper_shadow_test(telegram_user_id: int) -> bool:
+    if not settings.WHISPER_TEST_ENABLED:
+        return False
+
+    if not settings.WHISPER_TEST_TRANSCRIBE_URL:
+        logger.warning(
+            "WHISPER_TEST_ENABLED is true but WHISPER_TEST_URL is not configured."
+        )
+        return False
+
+    allowed_user_id = settings.WHISPER_TEST_TELEGRAM_ID
+    if allowed_user_id and telegram_user_id != allowed_user_id:
+        return False
+
+    return True
+
+
+def schedule_whisper_shadow_log(
+    *,
+    whisper_task: "asyncio.Task[TranscriptionResult]",
+    yandex_result: TranscriptionResult,
+    user_id: int,
+    message_id: int,
+) -> None:
+    asyncio.create_task(
+        _log_whisper_shadow_result(
+            whisper_task=whisper_task,
+            yandex_result=yandex_result,
+            user_id=user_id,
+            message_id=message_id,
+        )
+    )
+
+
+async def _log_whisper_shadow_result(
+    *,
+    whisper_task: "asyncio.Task[TranscriptionResult]",
+    yandex_result: TranscriptionResult,
+    user_id: int,
+    message_id: int,
+) -> None:
+    try:
+        whisper_result = await whisper_task
+    except asyncio.CancelledError:
+        return
+    except Exception as exc:
+        logger.error(
+            "Whisper shadow task failed for user=%s message=%s: %s",
+            user_id,
+            message_id,
+            exc,
+            exc_info=True,
+        )
+        return
+
+    logger.info(
+        (
+            "STT shadow compare | user=%s | message=%s | "
+            "yandex=%.2fs | whisper=%.2fs | delta=%.2fs"
+        ),
+        user_id,
+        message_id,
+        yandex_result.duration_seconds,
+        whisper_result.duration_seconds,
+        whisper_result.duration_seconds - yandex_result.duration_seconds,
+    )
+    logger.info(
+        'STT shadow texts | user=%s | message=%s | yandex="%s" | whisper="%s"',
+        user_id,
+        message_id,
+        _preview_text(yandex_result.text),
+        _preview_text(whisper_result.text),
+    )

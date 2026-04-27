@@ -37,12 +37,30 @@ class Settings:
     YANDEX_GPT_MODEL: str = os.getenv("YANDEX_GPT_MODEL", "yandexgpt")
     YANDEX_GPT_VERSION: str = os.getenv("YANDEX_GPT_VERSION", "latest")
     YANDEX_API_TIMEOUT_SECONDS: float = float(os.getenv("YANDEX_API_TIMEOUT_SECONDS", "30"))
+    WHISPER_TEST_ENABLED: bool = os.getenv("WHISPER_TEST_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    WHISPER_TEST_URL: str = os.getenv("WHISPER_TEST_URL", "")
+    WHISPER_TEST_TIMEOUT_SECONDS: float = float(os.getenv("WHISPER_TEST_TIMEOUT_SECONDS", "30"))
+    WHISPER_TEST_TELEGRAM_ID: int = int(os.getenv("WHISPER_TEST_TELEGRAM_ID", "0") or 0)
 
     @property
     def YANDEX_GPT_MODEL_URI(self) -> str:
         if not self.YANDEX_FOLDER_ID:
             return ""
         return f"gpt://{self.YANDEX_FOLDER_ID}/{self.YANDEX_GPT_MODEL}/{self.YANDEX_GPT_VERSION}"
+
+    @property
+    def WHISPER_TEST_TRANSCRIBE_URL(self) -> str:
+        base_url = self.WHISPER_TEST_URL.strip().rstrip("/")
+        if not base_url:
+            return ""
+        if base_url.endswith("/transcribe"):
+            return base_url
+        return f"{base_url}/transcribe"
 
 
 

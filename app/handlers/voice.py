@@ -1,67 +1,63 @@
+import asyncio
 import time
 from collections import defaultdict
-from aiogram import Router, types, F, Bot
-from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+
+from aiogram import Bot, F, Router, types
 from aiogram.enums import ButtonStyle
-from app.database.connection import async_session
-from app.database.repositories.user import UserRepository
-from app.database.repositories.transaction import TransactionRepository
-from app.services.speech_service import transcribe_audio
-from app.services.parser import parse_transactions
-from app.services.phone_prompt import send_phone_prompt
-from app.services.transaction import TransactionService
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
 from app.config import settings
 from app.constants import CATEGORY_EMOJI, CATEGORY_NAMES
+from app.database.connection import async_session
+from app.database.repositories.transaction import TransactionRepository
+from app.database.repositories.user import UserRepository
+from app.services.parser import parse_transactions
+from app.services.phone_prompt import send_phone_prompt
+from app.services.speech_service import (
+    schedule_whisper_shadow_log,
+    should_run_whisper_shadow_test,
+    transcribe_audio,
+    transcribe_audio_whisper_test,
+)
+from app.services.transaction import TransactionService
 from app.utils.formatting import format_amount
 from app.utils.logger import setup_logger
 
 logger = setup_logger("voice_handler")
 router = Router()
 
-# ── Rate limiter (in-memory) ─────────────────────────────────
-
 _user_timestamps: dict[int, list[float]] = defaultdict(list)
-
-_PENDING_TTL = 300.0  # 5 minutes — confirmations older than this are discarded
+_PENDING_TTL = 300.0  # 5 minutes
+_pending_confirmations: dict[str, dict] = {}
 
 
 def _check_rate_limit(user_id: int) -> bool:
     """Return True if user is within rate limit, False if exceeded."""
     now = time.time()
-    window = 60.0  # 1 minute
+    window = 60.0
     limit = settings.VOICE_RATE_LIMIT
-
-    # Use .get() to avoid defaultdict auto-creating an empty entry
     recent = [t for t in _user_timestamps.get(user_id, []) if now - t < window]
 
     if recent:
         _user_timestamps[user_id] = recent
     else:
-        # Remove the key entirely to keep memory clean
         _user_timestamps.pop(user_id, None)
 
     if len(recent) >= limit:
         return False
 
-    # Within limit — record this request
     _user_timestamps.setdefault(user_id, []).append(now)
     return True
-
-
-
-# ── Pending confirmations (in-memory) with TTL ───────────────
-
-_pending_confirmations: dict[str, dict] = {}
 
 
 def _cleanup_stale_pending() -> None:
     """Remove pending confirmations older than TTL to prevent memory leaks."""
     now = time.time()
     stale = [k for k, v in _pending_confirmations.items() if now - v.get("created_at", 0) > _PENDING_TTL]
-    for k in stale:
-        logger.debug(f"Discarding stale pending confirmation: {k}")
-        _pending_confirmations.pop(k, None)
+    for key in stale:
+        logger.debug("Discarding stale pending confirmation: %s", key)
+        _pending_confirmations.pop(key, None)
 
 
 async def _maybe_send_phone_prompt(
@@ -74,26 +70,27 @@ async def _maybe_send_phone_prompt(
 
     try:
         await send_phone_prompt(callback.bot, telegram_id)
-    except Exception as e:
-        logger.error(f"Failed to send delayed phone prompt to user {telegram_id}: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(
+            "Failed to send delayed phone prompt to user %s: %s",
+            telegram_id,
+            exc,
+            exc_info=True,
+        )
 
-
-# ── Voice message handler ────────────────────────────────────
 
 @router.message(F.voice)
 async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
-    """Full voice → transcribe → parse → confirm → store pipeline."""
+    """Full voice -> transcribe -> parse -> confirm -> store pipeline."""
     if await state.get_state():
         return
 
     user_id = message.from_user.id
     duration = message.voice.duration
-    logger.info(f"Voice message from user {user_id}, duration: {duration}s")
+    logger.info("Voice message from user %s, duration: %ss", user_id, duration)
 
-    # Clean up stale confirmations on every incoming voice message
     _cleanup_stale_pending()
 
-    # Guard 1: Duration limit
     if duration > settings.MAX_VOICE_DURATION:
         await message.answer(
             f"⏱ Ovozli xabar juda uzun ({duration}s).\n"
@@ -101,27 +98,39 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
         )
         return
 
-    # Guard 2: Rate limit
     if not _check_rate_limit(user_id):
         await message.answer(
             "⚠️ Juda ko'p ovozli xabar yubordingiz.\n"
             "Iltimos, 1 daqiqa kutib, qaytadan urinib ko'ring."
         )
-        logger.warning(f"Rate limit exceeded for user {user_id}")
+        logger.warning("Rate limit exceeded for user %s", user_id)
         return
 
-    # Step 1: Acknowledge receipt
     processing_msg = await message.answer("⏳")
+    whisper_task: asyncio.Task | None = None
 
     try:
-        # Step 2: Download voice file to memory (no disk I/O)
         file = await bot.get_file(message.voice.file_id)
         audio_io = await bot.download_file(file.file_path)
         audio_bytes = audio_io.read()
-        logger.info(f"Downloaded voice to memory: {len(audio_bytes):,} bytes")
+        logger.info("Downloaded voice to memory: %s bytes", f"{len(audio_bytes):,}")
 
-        # Step 3: Transcribe with Whisper (async, in-memory)
+        if should_run_whisper_shadow_test(user_id):
+            whisper_task = asyncio.create_task(
+                transcribe_audio_whisper_test(
+                    audio_bytes,
+                    filename=f"{message.voice.file_id}.ogg",
+                )
+            )
+
         result = await transcribe_audio(audio_bytes)
+        if whisper_task is not None:
+            schedule_whisper_shadow_log(
+                whisper_task=whisper_task,
+                yandex_result=result,
+                user_id=user_id,
+                message_id=message.message_id,
+            )
 
         if not result.text:
             await processing_msg.edit_text(
@@ -130,9 +139,7 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
             )
             return
 
-        # Step 4: Parse transaction(s) — supports multiple in one message
         parsed_list = await parse_transactions(result.text)
-
         if not parsed_list:
             await processing_msg.edit_text(
                 "🤔 Summani aniqlay olmadim.\n"
@@ -141,7 +148,6 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
             )
             return
 
-        # Step 5: Store pending confirmation with all parsed results
         confirm_key = f"{user_id}_{message.message_id}"
         _pending_confirmations[confirm_key] = {
             "telegram_id": user_id,
@@ -153,31 +159,48 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
             "created_at": time.time(),
         }
 
-        # Step 6: Build confirmation message
         conf_warning = ""
         if result.confidence < 0.6:
             conf_warning = "\n⚠️ _Ovoz sifati past. Iltimos, tekshiring._\n"
 
         confirm_text = _build_confirm_text(parsed_list, result.text, conf_warning)
-
         btn_label = "✅ Ha, barchasini saqlash" if len(parsed_list) > 1 else "✅ Ha, saqlash"
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text=btn_label, callback_data=f"confirm_{confirm_key}", style=ButtonStyle.SUCCESS),
-                InlineKeyboardButton(text="❌ Yo'q", callback_data=f"cancel_{confirm_key}", style=ButtonStyle.DANGER),
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=btn_label,
+                        callback_data=f"confirm_{confirm_key}",
+                        style=ButtonStyle.SUCCESS,
+                    ),
+                    InlineKeyboardButton(
+                        text="❌ Yo'q",
+                        callback_data=f"cancel_{confirm_key}",
+                        style=ButtonStyle.DANGER,
+                    ),
+                ]
             ]
-        ])
+        )
 
         await processing_msg.edit_text(confirm_text, parse_mode="Markdown", reply_markup=keyboard)
-        logger.info(f"Confirmation sent to user {user_id}: {len(parsed_list)} txn(s) (conf: {result.confidence:.2f})")
+        logger.info(
+            "Confirmation sent to user %s: %s txn(s) (conf: %.2f)",
+            user_id,
+            len(parsed_list),
+            result.confidence,
+        )
 
-    except FileNotFoundError as e:
-        logger.error(f"Credentials error: {e}")
+    except FileNotFoundError as exc:
+        if whisper_task is not None and not whisper_task.done():
+            whisper_task.cancel()
+        logger.error("Credentials error: %s", exc)
         await processing_msg.edit_text(
             "⚠️ Tizim sozlamalari noto'g'ri.\nIltimos, administratorga murojaat qiling."
         )
-    except Exception as e:
-        logger.error(f"Voice processing error for user {user_id}: {e}", exc_info=True)
+    except Exception as exc:
+        if whisper_task is not None and not whisper_task.done():
+            whisper_task.cancel()
+        logger.error("Voice processing error for user %s: %s", user_id, exc, exc_info=True)
         try:
             await processing_msg.edit_text(
                 "⚠️ Tizimda xatolik yuz berdi.\n"
@@ -187,8 +210,6 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
             pass
 
 
-# ── Confirmation message builder ─────────────────────────────
-
 def _build_confirm_text(
     parsed_list: list,
     raw_text: str,
@@ -196,32 +217,30 @@ def _build_confirm_text(
 ) -> str:
     """Build a confirmation message for one or more parsed transactions."""
     if len(parsed_list) == 1:
-        # Single transaction — same compact format as before
-        p = parsed_list[0]
-        type_uz = "Kirim" if p.type == "income" else "Chiqim"
-        emoji = "📈" if p.type == "income" else "📉"
-        cat_emoji = CATEGORY_EMOJI.get(p.category, "📦")
-        cat_name = CATEGORY_NAMES.get(p.category, p.category)
-        amount_str = format_amount(p.amount, p.currency)
+        parsed = parsed_list[0]
+        type_uz = "Kirim" if parsed.type == "income" else "Chiqim"
+        emoji = "📈" if parsed.type == "income" else "📉"
+        cat_emoji = CATEGORY_EMOJI.get(parsed.category, "📦")
+        cat_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
+        amount_str = format_amount(parsed.amount, parsed.currency)
         return (
             f"{emoji} *{type_uz}*\n"
             f"💵 {amount_str}\n"
             f"{cat_emoji} {cat_name}\n\n"
             f"📝 _{raw_text}_\n"
             f"{conf_warning}\n"
-            f"Shu ma'lumot to'g'rimi?"
+            "Shu ma'lumot to'g'rimi?"
         )
 
-    # Multiple transactions — numbered list
     lines = [f"📋 *{len(parsed_list)} ta operatsiya topildi:*\n"]
-    for i, p in enumerate(parsed_list, 1):
-        emoji = "📈" if p.type == "income" else "📉"
-        type_uz = "Kirim" if p.type == "income" else "Chiqim"
-        cat_emoji = CATEGORY_EMOJI.get(p.category, "📦")
-        cat_name = CATEGORY_NAMES.get(p.category, p.category)
-        amount_str = format_amount(p.amount, p.currency)
+    for index, parsed in enumerate(parsed_list, 1):
+        emoji = "📈" if parsed.type == "income" else "📉"
+        type_uz = "Kirim" if parsed.type == "income" else "Chiqim"
+        cat_emoji = CATEGORY_EMOJI.get(parsed.category, "📦")
+        cat_name = CATEGORY_NAMES.get(parsed.category, parsed.category)
+        amount_str = format_amount(parsed.amount, parsed.currency)
         lines.append(
-            f"*{i}.* {emoji} {type_uz} — {amount_str}\n"
+            f"*{index}.* {emoji} {type_uz} — {amount_str}\n"
             f"     {cat_emoji} {cat_name}"
         )
 
@@ -231,8 +250,6 @@ def _build_confirm_text(
     lines.append("\nBarchasini saqlaymizmi?")
     return "\n".join(lines)
 
-
-# ── Confirmation callbacks ───────────────────────────────────
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def handle_confirm(callback: CallbackQuery):
@@ -266,7 +283,7 @@ async def handle_confirm(callback: CallbackQuery):
                     cat_emoji = CATEGORY_EMOJI.get(txn["category"], "📦")
                     amount_str = format_amount(txn["amount"], txn["currency"])
                     response = (
-                        f"✅ Operatsiya saqlandi!\n\n"
+                        "✅ Operatsiya saqlandi!\n\n"
                         f"{emoji} *Tur:* {type_uz}\n"
                         f"💵 *Summa:* {amount_str}\n"
                         f"{cat_emoji} *Kategoriya:* {txn['category']}\n"
@@ -290,11 +307,11 @@ async def handle_confirm(callback: CallbackQuery):
                 )
                 if result["success"]:
                     lines = [f"✅ *{result['count']} ta operatsiya saqlandi!*\n"]
-                    for i, txn in enumerate(result["transactions"], 1):
+                    for index, txn in enumerate(result["transactions"], 1):
                         emoji = "📈" if txn["type"] == "income" else "📉"
                         cat_emoji = CATEGORY_EMOJI.get(txn["category"], "📦")
                         amount_str = format_amount(txn["amount"], txn["currency"])
-                        lines.append(f"{i}. {emoji} {amount_str} — {cat_emoji} {txn['category']}")
+                        lines.append(f"{index}. {emoji} {amount_str} — {cat_emoji} {txn['category']}")
                     await callback.message.edit_text("\n".join(lines), parse_mode="Markdown")
                     await _maybe_send_phone_prompt(
                         callback=callback,
@@ -306,10 +323,14 @@ async def handle_confirm(callback: CallbackQuery):
                         "⚠️ Saqlashda xatolik yuz berdi. Qaytadan urinib ko'ring."
                     )
 
-        logger.info(f"{len(parsed_list)} transaction(s) confirmed and saved for user {pending['telegram_id']}")
+        logger.info(
+            "%s transaction(s) confirmed and saved for user %s",
+            len(parsed_list),
+            pending["telegram_id"],
+        )
 
-    except Exception as e:
-        logger.error(f"Confirmation error: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error("Confirmation error: %s", exc, exc_info=True)
         await callback.message.edit_text("⚠️ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
 
     await callback.answer()
@@ -323,4 +344,4 @@ async def handle_cancel(callback: CallbackQuery):
 
     await callback.message.edit_text("🚫 Operatsiya bekor qilindi.")
     await callback.answer()
-    logger.info(f"Transaction cancelled by user {callback.from_user.id}")
+    logger.info("Transaction cancelled by user %s", callback.from_user.id)
