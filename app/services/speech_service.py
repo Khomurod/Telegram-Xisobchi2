@@ -65,17 +65,38 @@ async def close_speech_session() -> None:
 
 async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> TranscriptionResult:
     """
+    Transcribe audio using Faster-Whisper first, then fall back to Yandex.
+
+    Args:
+        audio_bytes: Raw audio file content (OGG/OPUS from Telegram)
+        filename: Filename hint used for multipart uploads.
+    """
+    if settings.WHISPER_TEST_TRANSCRIBE_URL:
+        whisper_result = await transcribe_audio_whisper_test(
+            audio_bytes,
+            filename=filename,
+        )
+        if whisper_result.text:
+            return whisper_result
+
+        logger.warning(
+            "Whisper primary returned no text; falling back to Yandex SpeechKit."
+        )
+
+    return await _transcribe_audio_yandex(audio_bytes)
+
+
+async def _transcribe_audio_yandex(audio_bytes: bytes) -> TranscriptionResult:
+    """
     Transcribe audio using Yandex SpeechKit.
 
     Args:
         audio_bytes: Raw audio file content (OGG/OPUS from Telegram)
-        filename: Filename hint kept for API compatibility.
     """
-    del filename
 
     if not settings.YANDEX_API_KEY:
         raise RuntimeError(
-            "Yandex API key not configured. Set YANDEX_API_KEY env var."
+            "No speech provider succeeded and Yandex API key is not configured."
         )
 
     start_time = time.time()
@@ -139,19 +160,19 @@ async def transcribe_audio_whisper_test(
     filename: str = "voice.ogg",
 ) -> TranscriptionResult:
     """
-    Transcribe audio using the external Faster-Whisper test endpoint.
+    Transcribe audio using the external Faster-Whisper endpoint.
 
     The file is sent as multipart/form-data under the `file` field and expects
     a response shaped like {"text": "..."}.
     """
     if not settings.WHISPER_TEST_TRANSCRIBE_URL:
         raise RuntimeError(
-            "Whisper test URL not configured. Set WHISPER_TEST_URL env var."
+            "Whisper URL not configured. Set WHISPER_TEST_URL env var."
         )
 
     start_time = time.time()
     logger.info(
-        "Shadow-testing Faster-Whisper (%s bytes) via %s",
+        "Transcribing audio (%s bytes) via Faster-Whisper %s",
         f"{len(audio_bytes):,}",
         settings.WHISPER_TEST_TRANSCRIBE_URL,
     )
@@ -175,7 +196,7 @@ async def transcribe_audio_whisper_test(
 
             if resp.status != 200:
                 error_text = await resp.text()
-                logger.error("Whisper test error %s: %s", resp.status, error_text)
+                logger.error("Whisper STT error %s: %s", resp.status, error_text)
                 return TranscriptionResult(
                     text="",
                     confidence=0.0,
@@ -187,7 +208,7 @@ async def transcribe_audio_whisper_test(
             text = str(result.get("text", "")).strip()
             confidence = 0.95 if text else 0.0
 
-            logger.info("Whisper test STT (%.1fs): %s", elapsed, _preview_text(text))
+            logger.info("Whisper STT (%.1fs): %s", elapsed, _preview_text(text))
 
             return TranscriptionResult(
                 text=text,
@@ -198,7 +219,7 @@ async def transcribe_audio_whisper_test(
 
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
         elapsed = time.time() - start_time
-        logger.error("Whisper test request failed (%.1fs): %s", elapsed, exc)
+        logger.error("Whisper STT request failed (%.1fs): %s", elapsed, exc)
         return TranscriptionResult(
             text="",
             confidence=0.0,

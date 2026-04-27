@@ -43,7 +43,10 @@ class Settings:
         "yes",
         "on",
     }
-    WHISPER_TEST_URL: str = os.getenv("WHISPER_TEST_URL", "")
+    WHISPER_TEST_URL: str = os.getenv(
+        "WHISPER_TEST_URL",
+        "https://kholmurod-xisobchi-whisper.hf.space",
+    )
     WHISPER_TEST_TIMEOUT_SECONDS: float = float(os.getenv("WHISPER_TEST_TIMEOUT_SECONDS", "30"))
     WHISPER_TEST_TELEGRAM_ID: int = int(os.getenv("WHISPER_TEST_TELEGRAM_ID", "0") or 0)
 

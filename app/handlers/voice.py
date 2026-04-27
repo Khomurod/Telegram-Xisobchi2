@@ -1,4 +1,3 @@
-import asyncio
 import time
 from collections import defaultdict
 
@@ -14,12 +13,7 @@ from app.database.repositories.transaction import TransactionRepository
 from app.database.repositories.user import UserRepository
 from app.services.parser import parse_transactions
 from app.services.phone_prompt import send_phone_prompt
-from app.services.speech_service import (
-    schedule_whisper_shadow_log,
-    should_run_whisper_shadow_test,
-    transcribe_audio,
-    transcribe_audio_whisper_test,
-)
+from app.services.speech_service import transcribe_audio
 from app.services.transaction import TransactionService
 from app.utils.formatting import format_amount
 from app.utils.logger import setup_logger
@@ -107,7 +101,6 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
         return
 
     processing_msg = await message.answer("⏳")
-    whisper_task: asyncio.Task | None = None
 
     try:
         file = await bot.get_file(message.voice.file_id)
@@ -115,22 +108,10 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
         audio_bytes = audio_io.read()
         logger.info("Downloaded voice to memory: %s bytes", f"{len(audio_bytes):,}")
 
-        if should_run_whisper_shadow_test(user_id):
-            whisper_task = asyncio.create_task(
-                transcribe_audio_whisper_test(
-                    audio_bytes,
-                    filename=f"{message.voice.file_id}.ogg",
-                )
-            )
-
-        result = await transcribe_audio(audio_bytes)
-        if whisper_task is not None:
-            schedule_whisper_shadow_log(
-                whisper_task=whisper_task,
-                yandex_result=result,
-                user_id=user_id,
-                message_id=message.message_id,
-            )
+        result = await transcribe_audio(
+            audio_bytes,
+            filename=f"{message.voice.file_id}.ogg",
+        )
 
         if not result.text:
             await processing_msg.edit_text(
@@ -191,15 +172,11 @@ async def handle_voice(message: types.Message, bot: Bot, state: FSMContext):
         )
 
     except FileNotFoundError as exc:
-        if whisper_task is not None and not whisper_task.done():
-            whisper_task.cancel()
         logger.error("Credentials error: %s", exc)
         await processing_msg.edit_text(
             "⚠️ Tizim sozlamalari noto'g'ri.\nIltimos, administratorga murojaat qiling."
         )
     except Exception as exc:
-        if whisper_task is not None and not whisper_task.done():
-            whisper_task.cancel()
         logger.error("Voice processing error for user %s: %s", user_id, exc, exc_info=True)
         try:
             await processing_msg.edit_text(
