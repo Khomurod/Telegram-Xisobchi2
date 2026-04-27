@@ -65,12 +65,25 @@ async def close_speech_session() -> None:
 
 async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> TranscriptionResult:
     """
-    Transcribe audio using Faster-Whisper first, then fall back to Yandex.
+    Transcribe audio using Yandex first, then fall back to Faster-Whisper.
 
     Args:
         audio_bytes: Raw audio file content (OGG/OPUS from Telegram)
         filename: Filename hint used for multipart uploads.
     """
+    if settings.YANDEX_API_KEY:
+        yandex_result = await _transcribe_audio_yandex(audio_bytes)
+        if yandex_result.text:
+            return yandex_result
+
+        logger.warning(
+            "Yandex primary returned no text; falling back to Faster-Whisper."
+        )
+    else:
+        logger.warning(
+            "YANDEX_API_KEY is not configured; falling back to Faster-Whisper."
+        )
+
     if settings.WHISPER_TEST_TRANSCRIBE_URL:
         whisper_result = await transcribe_audio_whisper_test(
             audio_bytes,
@@ -80,10 +93,15 @@ async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> T
             return whisper_result
 
         logger.warning(
-            "Whisper primary returned no text; falling back to Yandex SpeechKit."
+            "Whisper backup returned no text after Yandex fallback."
         )
 
-    return await _transcribe_audio_yandex(audio_bytes)
+    return TranscriptionResult(
+        text="",
+        confidence=0.0,
+        duration_seconds=0.0,
+        language="uz",
+    )
 
 
 async def _transcribe_audio_yandex(audio_bytes: bytes) -> TranscriptionResult:
@@ -95,9 +113,7 @@ async def _transcribe_audio_yandex(audio_bytes: bytes) -> TranscriptionResult:
     """
 
     if not settings.YANDEX_API_KEY:
-        raise RuntimeError(
-            "No speech provider succeeded and Yandex API key is not configured."
-        )
+        raise RuntimeError("Yandex API key not configured. Set YANDEX_API_KEY env var.")
 
     start_time = time.time()
     logger.info("Transcribing audio (%s bytes) via Yandex SpeechKit", f"{len(audio_bytes):,}")
